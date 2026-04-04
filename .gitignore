@@ -1,0 +1,3 @@
+.env
+*.backup*
+server.js.backup2
