@@ -1,0 +1,37 @@
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+const PORT = 3000;
+
+app.use(cors());
+app.use(express.json());
+
+// MVP: Retourne des prix HARDCODÉS pour tester
+app.post('/api/search-prices', async (req, res) => {
+  try {
+    const { productName } = req.body;
+    console.log(`🔍 Searching for: ${productName}`);
+
+    // Pour maintenant: retourne des prix de demo
+    // Plus tard: scraper les vraies APIs
+    const results = [
+      { site: 'Amazon', price: 89, url: 'https://amazon.com/s?k=' + productName },
+      { site: 'eBay', price: 65, url: 'https://ebay.com/sch/i.html?_nkw=' + productName },
+      { site: 'Vinted', price: 45, url: 'https://vinted.com/items?search_text=' + productName },
+      { site: 'StockX', price: 110, url: 'https://stockx.com/search?s=' + productName },
+      { site: 'GOAT', price: 115, url: 'https://goat.com/search?query=' + productName },
+      { site: 'Nike', price: 109, url: 'https://nike.com/search?q=' + productName },
+    ];
+
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('Error:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`✅ Backend running on http://localhost:${PORT}`);
+});
