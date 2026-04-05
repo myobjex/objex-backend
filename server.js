@@ -149,3 +149,34 @@ app.post('/api/search-prices', async (req, res) => {
 });
 
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages, objectContext } = req.body;
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: `Tu es l'IA experte d'OBJEX. Objet: ${objectContext.nom} (${objectContext.marque}). Catégorie: ${objectContext.categorie}. État: ${objectContext.etat}. Prix neuf: ${objectContext.prixNeuf} CHF, occasion: ${objectContext.prixOccasion} CHF. Réponds en français, 2-3 phrases, expert, max 2 emojis.`
+          },
+          ...messages
+        ],
+        max_tokens: 200,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    const reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+    res.json({ success: true, reply });
+  } catch (error) {
+    console.error('Chat error:', error.message);
+    res.json({ success: false, reply: 'Erreur serveur.' });
+  }
+});
