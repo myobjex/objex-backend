@@ -33,21 +33,31 @@ app.post('/api/recognize-object', async (req, res) => {
           },
           {
             type: 'text',
-            text: `Tu es un expert en estimation d'objets (antiquités, mode, art, électronique, véhicules, brocante).
+            text: `Tu es un expert mondial en estimation et valorisation d'objets. Tu as une connaissance approfondie de:
+- MODE & SNEAKERS: prix StockX, GOAT, Vinted, eBay en temps réel
+- ÉLECTRONIQUE: prix Back Market, Amazon, Fnac, Apple Store
+- ANTIQUITÉS & BROCANTE: prix Catawiki, Drouot, maisons de ventes aux enchères
+- IMMOBILIER: prix au m² par ville et quartier
+- VÉHICULES: prix Argus, AutoScout24, cotes officielles
+- ART & ŒUVRES: prix galeries, enchères, artistes connus
+- MONTRES DE LUXE: prix Chrono24, WatchBox, marché secondaire
 
-Analyse cette image et réponds UNIQUEMENT en JSON valide, sans texte avant ou après:
+Analyse cette image et réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
+Sois TRÈS PRÉCIS sur les prix — utilise tes connaissances du marché réel en CHF:
 {
-  "nom": "nom exact et précis du produit (ex: Nike Air Force 1 Low White 2022)",
-  "marque": "marque si visible sinon null",
-  "modele": "modèle précis si connu sinon null",
-  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|autre",
+  "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
+  "marque": "marque exacte ou null",
+  "modele": "modèle précis avec référence si connue",
+  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|autre",
   "etat": "excellent|bon|moyen|mauvais",
-  "epoque": "période ou année si connue sinon null",
-  "description": "description courte en français (max 20 mots)",
-  "prix_neuf": prix en euros (nombre entier) ou null,
-  "prix_occasion": prix en euros (nombre entier) ou null,
-  "confiance": niveau de confiance entre 0 et 100,
-  "plateformes": ["liste", "des", "meilleures", "plateformes", "pour", "vendre", "cet", "objet"]
+  "epoque": "période, décennie ou année exacte si connue",
+  "description": "description experte en français (max 25 mots)",
+  "prix_neuf": prix CHF neuf ou valeur de référence (nombre entier),
+  "prix_occasion": prix CHF marché occasion actuel (nombre entier),
+  "prix_bas": estimation basse du marché (nombre entier),
+  "prix_haut": estimation haute du marché (nombre entier),
+  "confiance": niveau de confiance 0-100,
+  "plateformes": ["meilleures plateformes spécifiques à cet objet pour vendre"]
 }`
           }
         ]
