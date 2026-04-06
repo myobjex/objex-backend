@@ -422,6 +422,58 @@ app.post('/api/vinted-prices', async (req, res) => {
   }
 });
 
+
+app.post('/api/etsy-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const response = await axios.get(
+      'https://etsy-api2.p.rapidapi.com/product/search',
+      {
+        params: {
+          query: query,
+          page: '1',
+          currency: 'EUR',
+          language: 'fr',
+          country: 'FR',
+          orderBy: 'mostRelevant',
+        },
+        headers: {
+          'x-rapidapi-host': 'etsy-api2.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    const items = response.data?.results || response.data?.data || [];
+    if (items.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prices = items
+      .map(p => parseFloat(p.price || p.listing_price?.amount || 0))
+      .filter(p => p > 0);
+
+    if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = Math.round(Math.min(...prices));
+    const prixHaut = Math.round(Math.max(...prices));
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas,
+      prixHaut,
+      count: items.length,
+    });
+
+  } catch (error) {
+    console.error('Etsy API error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
 
 app.post('/api/chat', async (req, res) => {
