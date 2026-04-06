@@ -21,6 +21,8 @@ app.post('/api/recognize-object', async (req, res) => {
     const { imageBase64 } = req.body;
     if (!imageBase64) return res.json({ success: false, error: 'No image' });
 
+    const mimeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
     console.log('🔍 Appel Claude Vision...');
@@ -33,7 +35,7 @@ app.post('/api/recognize-object', async (req, res) => {
         content: [
           {
             type: 'image',
-            source: { type: 'base64', media_type: 'image/jpeg', data: base64Data },
+            source: { type: 'base64', media_type: mimeType, data: base64Data },
           },
           {
             type: 'text',
