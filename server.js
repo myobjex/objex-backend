@@ -519,6 +519,55 @@ app.post('/api/chrono24-prices', async (req, res) => {
   }
 });
 
+
+app.post('/api/catawiki-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const response = await axios.get(
+      'https://catawiki-scraping.p.rapidapi.com/lots/search',
+      {
+        params: {
+          language: 'fr',
+          page: '1',
+          query: query,
+        },
+        headers: {
+          'x-rapidapi-host': 'catawiki-scraping.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    const items = response.data?.lots || response.data?.results || [];
+    if (items.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prices = items
+      .map(p => parseFloat(p.current_bid || p.estimate_low || p.price || 0))
+      .filter(p => p > 0);
+
+    if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = Math.round(Math.min(...prices));
+    const prixHaut = Math.round(Math.max(...prices));
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas,
+      prixHaut,
+      count: items.length,
+    });
+
+  } catch (error) {
+    console.error('Catawiki API error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
 
 app.post('/api/chat', async (req, res) => {
