@@ -106,6 +106,8 @@ Réponds UNIQUEMENT en JSON valide en CHF:
         prixOccasion: result.prix_occasion,
         confiance: result.confiance,
         plateformes: result.plateformes || [],
+        prixBas: result.prix_bas,
+        prixHaut: result.prix_haut,
         prixPlateformes: result.prix_plateformes || {},
       }
     });
@@ -174,7 +176,11 @@ app.post('/api/search-prices', async (req, res) => {
 
 
 // eBay Browse API - Vrais prix live
+let _ebayToken = null;
+let _ebayTokenExpiry = 0;
+
 async function getEbayToken() {
+  if (_ebayToken && Date.now() < _ebayTokenExpiry) return _ebayToken;
   const credentials = Buffer.from(
     `${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`
   ).toString('base64');
@@ -189,7 +195,9 @@ async function getEbayToken() {
       }
     }
   );
-  return response.data.access_token;
+  _ebayToken = response.data.access_token;
+  _ebayTokenExpiry = Date.now() + (response.data.expires_in - 60) * 1000;
+  return _ebayToken;
 }
 
 app.post('/api/ebay-prices', async (req, res) => {
@@ -568,8 +576,6 @@ app.post('/api/catawiki-prices', async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
-
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, objectContext } = req.body;
@@ -600,3 +606,5 @@ app.post('/api/chat', async (req, res) => {
     res.json({ success: false, reply: 'Erreur serveur.' });
   }
 });
+
+app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
