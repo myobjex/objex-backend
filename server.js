@@ -172,6 +172,82 @@ app.post('/api/search-prices', async (req, res) => {
   res.json({ success: true, results, productName });
 });
 
+
+// eBay Browse API - Vrais prix live
+async function getEbayToken() {
+  const credentials = Buffer.from(
+    `${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`
+  ).toString('base64');
+  
+  const response = await axios.post(
+    'https://api.ebay.com/identity/v1/oauth2/token',
+    'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope',
+    {
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }
+    }
+  );
+  return response.data.access_token;
+}
+
+app.post('/api/ebay-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const token = await getEbayToken();
+    
+    const response = await axios.get(
+      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_FR',
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    const items = response.data.itemSummaries || [];
+    
+    if (items.length === 0) {
+      return res.json({ success: true, prix: null, count: 0, items: [] });
+    }
+
+    const prices = items
+      .map(i => parseFloat(i.price?.value || 0))
+      .filter(p => p > 0);
+    
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = Math.round(Math.min(...prices));
+    const prixHaut = Math.round(Math.max(...prices));
+
+    const topItems = items.slice(0, 5).map(i => ({
+      titre: i.title,
+      prix: parseFloat(i.price?.value || 0),
+      devise: i.price?.currency || 'EUR',
+      url: i.itemWebUrl,
+      image: i.image?.imageUrl || null,
+      etat: i.condition || 'Non précisé',
+    }));
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas,
+      prixHaut,
+      count: items.length,
+      items: topItems,
+    });
+
+  } catch (error) {
+    console.error('eBay API error:', error.response?.data || error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
 
 app.post('/api/chat', async (req, res) => {
