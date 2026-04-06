@@ -307,6 +307,63 @@ app.post('/api/amazon-prices', async (req, res) => {
   }
 });
 
+
+app.post('/api/autoscout-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const response = await axios.get(
+      'https://autoscout24-api.p.rapidapi.com/automotive/search',
+      {
+        params: {
+          query: query,
+          country: 'fr',
+          limit: '10',
+        },
+        headers: {
+          'x-rapidapi-host': 'autoscout24-api.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+        }
+      }
+    );
+
+    const listings = response.data?.listings || response.data?.results || [];
+    if (listings.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prices = listings
+      .map(p => parseFloat(p.price || p.prix || 0))
+      .filter(p => p > 0);
+
+    if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = Math.round(Math.min(...prices));
+    const prixHaut = Math.round(Math.max(...prices));
+
+    const topItems = listings.slice(0, 5).map(p => ({
+      titre: p.title || p.name || query,
+      prix: parseFloat(p.price || 0),
+      url: p.url || p.link || '',
+      annee: p.year || null,
+      km: p.mileage || null,
+    }));
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas,
+      prixHaut,
+      count: listings.length,
+      items: topItems,
+    });
+
+  } catch (error) {
+    console.error('AutoScout API error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
 
 app.post('/api/chat', async (req, res) => {
