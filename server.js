@@ -364,6 +364,64 @@ app.post('/api/autoscout-prices', async (req, res) => {
   }
 });
 
+
+app.post('/api/vinted-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const response = await axios.get(
+      'https://vinted-api3.p.rapidapi.com/search/v2',
+      {
+        params: {
+          query: query,
+          country: 'fr',
+          limit: '10',
+        },
+        headers: {
+          'x-rapidapi-host': 'vinted-api3.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    const items = response.data?.items || response.data?.results || [];
+    if (items.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prices = items
+      .map(p => parseFloat(p.price || p.total_item_price?.amount || 0))
+      .filter(p => p > 0);
+
+    if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = Math.round(Math.min(...prices));
+    const prixHaut = Math.round(Math.max(...prices));
+
+    const topItems = items.slice(0, 5).map(p => ({
+      titre: p.title || query,
+      prix: parseFloat(p.price || 0),
+      url: p.url || '',
+      image: p.photo?.url || null,
+      etat: p.status || null,
+    }));
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas,
+      prixHaut,
+      count: items.length,
+      items: topItems,
+    });
+
+  } catch (error) {
+    console.error('Vinted API error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
 
 app.post('/api/chat', async (req, res) => {
