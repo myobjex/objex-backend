@@ -22,7 +22,7 @@ app.post('/api/recognize-object', async (req, res) => {
     console.log('🔍 Appel Claude Vision...');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -43,7 +43,18 @@ app.post('/api/recognize-object', async (req, res) => {
 - MONTRES DE LUXE: prix Chrono24, WatchBox, marché secondaire
 
 Analyse cette image et réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
-Sois TRÈS PRÉCIS sur les prix — utilise tes connaissances du marché réel en CHF:
+Sois EXTRÊMEMENT PRÉCIS sur les prix. Règles strictes:
+1. Si tu identifies l'objet avec certitude: donne le VRAI prix du marché actuel (pas une estimation vague)
+2. Pour sneakers: vérifie StockX/GOAT selon coloris et taille standard EU42
+3. Pour électronique: prix Back Market grade A ou Amazon marketplace
+4. Pour montres: prix Chrono24 ou WatchBox marché secondaire réel
+5. Pour antiquités: prix Catawiki ou Drouot dernières ventes
+6. Pour véhicules: cote Argus ou AutoScout24 selon année/km moyens
+7. JAMAIS de prix ronds inventés — préfère une fourchette précise
+8. Si objet inconnu ou image floue: confiance < 50 et prix conservateurs
+Exemple bon prix: Nike Air Force 1 blanc EU42 = occasion 65-85 CHF selon état
+Exemple mauvais prix: 100 CHF (trop rond, inventé)
+Réponds UNIQUEMENT en JSON valide en CHF:
 {
   "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
   "marque": "marque exacte ou null",
