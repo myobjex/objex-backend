@@ -248,6 +248,65 @@ app.post('/api/ebay-prices', async (req, res) => {
   }
 });
 
+
+app.post('/api/amazon-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const response = await axios.get(
+      'https://real-time-amazon-data.p.rapidapi.com/search',
+      {
+        params: {
+          query: query,
+          page: '1',
+          country: 'FR',
+          sort_by: 'RELEVANCE',
+          product_condition: 'ALL',
+        },
+        headers: {
+          'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+        }
+      }
+    );
+
+    const products = response.data?.data?.products || [];
+    if (products.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prices = products
+      .map(p => parseFloat(p.product_price?.replace(/[^0-9.]/g, '') || 0))
+      .filter(p => p > 0);
+
+    if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
+
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = Math.round(Math.min(...prices));
+    const prixHaut = Math.round(Math.max(...prices));
+
+    const topItems = products.slice(0, 5).map(p => ({
+      titre: p.product_title,
+      prix: parseFloat(p.product_price?.replace(/[^0-9.]/g, '') || 0),
+      url: p.product_url,
+      image: p.product_photo,
+      note: p.product_star_rating,
+    }));
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas,
+      prixHaut,
+      count: products.length,
+      items: topItems,
+    });
+
+  } catch (error) {
+    console.error('Amazon API error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
 
 app.post('/api/chat', async (req, res) => {
