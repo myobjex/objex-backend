@@ -68,7 +68,19 @@ Réponds UNIQUEMENT en JSON valide en CHF:
   "prix_bas": estimation basse du marché (nombre entier),
   "prix_haut": estimation haute du marché (nombre entier),
   "confiance": niveau de confiance 0-100,
-  "plateformes": ["meilleures plateformes spécifiques à cet objet pour vendre"]
+  "plateformes": ["meilleures plateformes spécifiques à cet objet pour vendre"],
+  "prix_plateformes": {
+    "Vinted": prix estimé occasion sur Vinted en CHF (nombre entier ou null),
+    "eBay": prix estimé occasion sur eBay en CHF (nombre entier ou null),
+    "Amazon": prix estimé neuf/occasion sur Amazon en CHF (nombre entier ou null),
+    "Back Market": prix estimé reconditionné sur Back Market en CHF (nombre entier ou null),
+    "StockX": prix estimé sur StockX en CHF (nombre entier ou null si pas applicable),
+    "GOAT": prix estimé sur GOAT en CHF (nombre entier ou null si pas applicable),
+    "LeBonCoin": prix estimé sur LeBonCoin en CHF (nombre entier ou null),
+    "Vestiaire Collectif": prix estimé sur Vestiaire Collectif en CHF (nombre entier ou null si pas applicable),
+    "Catawiki": prix estimé sur Catawiki en CHF (nombre entier ou null si pas applicable),
+    "Chrono24": prix estimé sur Chrono24 en CHF (nombre entier ou null si pas applicable)
+  }
 }`
           }
         ]
@@ -94,6 +106,7 @@ Réponds UNIQUEMENT en JSON valide en CHF:
         prixOccasion: result.prix_occasion,
         confiance: result.confiance,
         plateformes: result.plateformes || [],
+        prixPlateformes: result.prix_plateformes || {},
       }
     });
 
