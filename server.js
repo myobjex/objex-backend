@@ -12,6 +12,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', version: '1.2.0', timestamp: new Date().toISOString() });
+});
+
 app.post('/api/recognize-object', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
