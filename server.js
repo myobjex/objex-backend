@@ -28,8 +28,9 @@ app.post('/api/recognize-object', async (req, res) => {
     console.log('🔍 Appel Claude Vision...');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      model: "claude-sonnet-4-6",
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      max_tokens: 2048,
       messages: [{
         role: 'user',
         content: [
@@ -39,7 +40,31 @@ app.post('/api/recognize-object', async (req, res) => {
           },
           {
             type: 'text',
-            text: `Tu es un expert mondial en estimation et valorisation d'objets. Tu as une connaissance approfondie de:
+            text: `Tu es le meilleur expert mondial capable d'identifier et valoriser ABSOLUMENT TOUT ce qui existe sur Terre. Tu utilises la recherche web pour obtenir les prix les plus précis et récents.
+
+Tu identifies et valorises TOUT:
+- OBJETS & MODE: sneakers, vêtements, montres, bijoux, sacs, accessoires
+- ELECTRONIQUE: smartphones, laptops, consoles, appareils photo, audio
+- VEHICULES: voitures, motos, bateaux, vélos
+- NATURE - PLANTES: espèces végétales, plantes rares, orchidées, bonsaï, cactus
+- NATURE - CHAMPIGNONS: espèces comestibles (cèpes, truffes, chanterelles), toxiques, rares
+- NATURE - ANIMAUX: races de chiens, chats, oiseaux, reptiles, poissons, insectes
+- NATURE - MINÉRAUX: pierres précieuses, cristaux, fossiles, météorites
+- ART & CULTURE: tableaux, sculptures, instruments de musique, BD, vinyles
+- ANTIQUITÉS & BROCANTE: meubles anciens, porcelaine, argenterie, horlogerie
+- GASTRONOMIE: vins, champagnes, spiritueux, produits rares, truffes, caviar
+- SPORT & LOISIRS: équipements sportifs, cartes de collection, figurines, LEGO
+
+RÈGLES STRICTES:
+1. Utilise la recherche web AVANT de répondre pour vérifier les prix actuels
+2. Identifie avec MAXIMUM de précision: espèce exacte, variété, race, modèle
+3. Pour les animaux: race exacte, valeur éleveur, valeur revente
+4. Pour les plantes: espèce latine, valeur jardinerie, valeur spécimen rare
+5. Pour les champignons: espèce exacte, comestibilité, valeur au kg
+6. Pour les minéraux: espèce minéralogique, qualité, valeur collection
+7. JAMAIS de prix inventés - cherche les vrais prix actuels sur internet
+8. Si image floue ou non identifiable: confiance < 40
+9. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans la description
 - MODE & SNEAKERS: prix StockX, GOAT, Vinted, eBay en temps réel
 - ÉLECTRONIQUE: prix Back Market, Amazon, Fnac, Apple Store
 - ANTIQUITÉS & BROCANTE: prix Catawiki, Drouot, maisons de ventes aux enchères
@@ -65,8 +90,8 @@ Réponds UNIQUEMENT en JSON valide en CHF:
   "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
   "marque": "marque exacte ou null",
   "modele": "modèle précis avec référence si connue",
-  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|autre",
-  "etat": "excellent|bon|moyen|mauvais",
+  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|plante|champignon|animal|mineral|gastronomie|sport|autre",
+  "etat": "excellent|bon|moyen|mauvais|sauvage|cultivé|domestique",
   "epoque": "période, décennie ou année exacte si connue",
   "description": "description experte en français (max 25 mots)",
   "prix_neuf": prix CHF neuf ou valeur de référence (nombre entier),
