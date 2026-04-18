@@ -30,7 +30,7 @@ app.post('/api/recognize-object', async (req, res) => {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       // tools: [{ type: "web_search_20250305", name: "web_search" }],
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages: [{
         role: 'user',
         content: [
