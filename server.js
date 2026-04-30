@@ -34,7 +34,12 @@ app.post('/api/recognize-object', async (req, res) => {
     const response = await groq.chat.completions.create({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       max_tokens: 1024,
-      messages: [{
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un expert en identification d'objets physiques. Tu analyses des images et retournes UNIQUEMENT un JSON valide, sans aucun texte avant ou après. Pas de markdown, pas d'explication. SEULEMENT le JSON brut. Tu identifies avec précision maximale: marque exacte, modèle exact, année, référence. Pour l'électronique Apple: distingue MacBook Air vs Pro, identifie la génération (M1/M2/M3/Intel), la taille d'écran. Pour les sneakers: marque + modèle + coloris exact. Confiance = 0-100 selon certitude d'identification.`
+        },
+        {
         role: 'user',
         content: [
           {
@@ -94,6 +99,7 @@ Réponds UNIQUEMENT en JSON valide:
           }
         ]
       }]
+      ]
     });
 
     // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
