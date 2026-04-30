@@ -992,4 +992,17 @@ app.post('/api/worthpoint-prices', async (req, res) => {
   }
 });
 
+// Keep-alive ping toutes les 14 minutes (Render free tier)
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://objex-backend.onrender.com';
+setInterval(async () => {
+  try {
+    const http = require('https');
+    http.get(SELF_URL + '/health', (res) => {
+      console.log('🏓 Keep-alive ping OK:', res.statusCode);
+    }).on('error', () => {});
+  } catch(e) {}
+}, 14 * 60 * 1000);
+
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
