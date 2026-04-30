@@ -29,7 +29,7 @@ app.post('/api/recognize-object', async (req, res) => {
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      // tools: [{ type: "web_search_20250305", name: "web_search" }],
       max_tokens: 4096,
       messages: [{
         role: 'user',
@@ -96,10 +96,24 @@ Réponds UNIQUEMENT en JSON valide:
     // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
     const textBlock = response.content.filter(b => b.type === 'text').pop();
     if (!textBlock) throw new Error('No text block in Claude response');
-    const content = textBlock.text;
-    console.log('✅ Claude response:', content.substring(0, 200));
+    const rawText = textBlock.text;
+    console.log('✅ Claude response:', rawText.substring(0, 300));
 
-    const result = JSON.parse(content.replace(/```json|```/g, '').trim());
+    // Extraction robuste du JSON
+    let jsonStr = rawText;
+    // Cherche un bloc ```json ... ```
+    const codeMatch = rawText.match(/```json\s*([\s\S]*?)```/);
+    if (codeMatch) {
+      jsonStr = codeMatch[1].trim();
+    } else {
+      // Cherche le premier { jusqu'au dernier }
+      const start = rawText.indexOf('{');
+      const end = rawText.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        jsonStr = rawText.substring(start, end + 1);
+      }
+    }
+    const result = JSON.parse(jsonStr);
 
     res.json({
       success: true,
