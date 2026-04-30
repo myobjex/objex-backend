@@ -30,7 +30,8 @@ app.post('/api/recognize-object', async (req, res) => {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       // tools: [{ type: "web_search_20250305", name: "web_search" }],
-      max_tokens: 4096,
+      max_tokens: 1024,
+      system: "Tu es un expert en identification d'objets. Réponds UNIQUEMENT avec un JSON valide, aucun texte avant ou après, aucune explication. JSON seulement.",
       messages: [{
         role: 'user',
         content: [
