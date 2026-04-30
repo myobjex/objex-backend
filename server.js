@@ -93,8 +93,11 @@ Réponds UNIQUEMENT en JSON valide:
       }]
     });
 
-    const content = response.content[0].text;
-    console.log('✅ Claude response:', content);
+    // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
+    const textBlock = response.content.filter(b => b.type === 'text').pop();
+    if (!textBlock) throw new Error('No text block in Claude response');
+    const content = textBlock.text;
+    console.log('✅ Claude response:', content.substring(0, 200));
 
     const result = JSON.parse(content.replace(/```json|```/g, '').trim());
 
