@@ -99,7 +99,6 @@ Réponds UNIQUEMENT en JSON valide:
           }
         ]
       }]
-      ]
     });
 
     // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
