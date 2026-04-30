@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const app = express();
@@ -10,6 +11,9 @@ app.use(express.json({ limit: '50mb' }));
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+});
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 app.get('/api/health', (req, res) => {
@@ -25,19 +29,17 @@ app.post('/api/recognize-object', async (req, res) => {
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    console.log('🔍 Appel Claude Vision...');
+    console.log('🔍 Appel Groq Vision...');
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      // tools: [{ type: "web_search_20250305", name: "web_search" }],
+    const response = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       max_tokens: 1024,
-      system: "Tu es un expert en identification d'objets. Réponds UNIQUEMENT avec un JSON valide, aucun texte avant ou après, aucune explication. JSON seulement.",
       messages: [{
         role: 'user',
         content: [
           {
-            type: 'image',
-            source: { type: 'base64', media_type: mimeType, data: base64Data },
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64Data}` },
           },
           {
             type: 'text',
@@ -95,10 +97,8 @@ Réponds UNIQUEMENT en JSON valide:
     });
 
     // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
-    const textBlock = response.content.filter(b => b.type === 'text').pop();
-    if (!textBlock) throw new Error('No text block in Claude response');
-    const rawText = textBlock.text;
-    console.log('✅ Claude response:', rawText.substring(0, 300));
+    const rawText = response.choices[0].message.content;
+    console.log('✅ Groq response:', rawText.substring(0, 300));
 
     // Extraction robuste du JSON
     let jsonStr = rawText;
