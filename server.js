@@ -29,7 +29,7 @@ app.post('/api/recognize-object', async (req, res) => {
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      // tools: [{ type: "web_search_20250305", name: "web_search" }],
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
       max_tokens: 4096,
       messages: [{
         role: 'user',
@@ -40,52 +40,27 @@ app.post('/api/recognize-object', async (req, res) => {
           },
           {
             type: 'text',
-            text: `Tu es le meilleur expert mondial capable d'identifier et valoriser ABSOLUMENT TOUT ce qui existe sur Terre. Tu utilises la recherche web pour obtenir les prix les plus précis et récents.
+            text: `Tu es un expert mondial en IDENTIFICATION d'objets. Ton seul rôle est d'IDENTIFIER avec précision maximale. Les prix réels viennent d'APIs externes — tu estimes les prix uniquement comme référence indicative.
 
-Tu identifies et valorises TOUT:
-- OBJETS & MODE: sneakers, vêtements, montres, bijoux, sacs, accessoires
-- ELECTRONIQUE: smartphones, laptops, consoles, appareils photo, audio
-- VEHICULES: voitures, motos, bateaux, vélos
-- NATURE - PLANTES: espèces végétales, plantes rares, orchidées, bonsaï, cactus
-- NATURE - CHAMPIGNONS: espèces comestibles (cèpes, truffes, chanterelles), toxiques, rares
-- NATURE - ANIMAUX: races de chiens, chats, oiseaux, reptiles, poissons, insectes
-- NATURE - MINÉRAUX: pierres précieuses, cristaux, fossiles, météorites
-- ART & CULTURE: tableaux, sculptures, instruments de musique, BD, vinyles
-- ANTIQUITÉS & BROCANTE: meubles anciens, porcelaine, argenterie, horlogerie
-- GASTRONOMIE: vins, champagnes, spiritueux, produits rares, truffes, caviar
-- SPORT & LOISIRS: équipements sportifs, cartes de collection, figurines, LEGO
+Tu identifies TOUT:
+- MODE & SNEAKERS: marque, modèle exact, coloris, année, référence
+- ELECTRONIQUE: marque, modèle, génération, capacité, couleur
+- MONTRES: marque, référence exacte, mouvement, matériaux
+- VEHICULES: marque, modèle, année, finition
+- ANTIQUITÉS: époque, style, matériaux, origine probable
+- ART: artiste si connu, technique, période
+- NATURE: espèce exacte (nom latin), variété, comestibilité si champignon
+- SPORT: marque, modèle, sport concerné
+- GASTRONOMIE: produit, appellation, millésime si visible
 
-RÈGLES STRICTES:
-1. Utilise la recherche web AVANT de répondre pour vérifier les prix actuels
-2. Identifie avec MAXIMUM de précision: espèce exacte, variété, race, modèle
-3. Pour les animaux: race exacte, valeur éleveur, valeur revente
-4. Pour les plantes: espèce latine, valeur jardinerie, valeur spécimen rare
-5. Pour les champignons: espèce exacte, comestibilité, valeur au kg
-6. Pour les minéraux: espèce minéralogique, qualité, valeur collection
-7. JAMAIS de prix inventés - cherche les vrais prix actuels sur internet
-8. Si image floue ou non identifiable: confiance < 40
-9. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans la description
-- MODE & SNEAKERS: prix StockX, GOAT, Vinted, eBay en temps réel
-- ÉLECTRONIQUE: prix Back Market, Amazon, Fnac, Apple Store
-- ANTIQUITÉS & BROCANTE: prix Catawiki, Drouot, maisons de ventes aux enchères
-- IMMOBILIER: prix au m² par ville et quartier
-- VÉHICULES: prix Argus, AutoScout24, cotes officielles
-- ART & ŒUVRES: prix galeries, enchères, artistes connus
-- MONTRES DE LUXE: prix Chrono24, WatchBox, marché secondaire
+RÈGLES IDENTIFICATION:
+1. Utilise le web search pour confirmer le modèle exact si nécessaire
+2. Sois TRÈS précis: pas "sneaker Nike" mais "Nike Air Force 1 Low '07 White EU42"
+3. Si image floue/objet non identifiable: confiance < 40
+4. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans description
+5. Estime les prix en CHF comme référence indicative uniquement
 
-Analyse cette image et réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
-Sois EXTRÊMEMENT PRÉCIS sur les prix. Règles strictes:
-1. Si tu identifies l'objet avec certitude: donne le VRAI prix du marché actuel (pas une estimation vague)
-2. Pour sneakers: vérifie StockX/GOAT selon coloris et taille standard EU42
-3. Pour électronique: prix Back Market grade A ou Amazon marketplace
-4. Pour montres: prix Chrono24 ou WatchBox marché secondaire réel
-5. Pour antiquités: prix Catawiki ou Drouot dernières ventes
-6. Pour véhicules: cote Argus ou AutoScout24 selon année/km moyens
-7. JAMAIS de prix ronds inventés — préfère une fourchette précise
-8. Si objet inconnu ou image floue: confiance < 50 et prix conservateurs
-Exemple bon prix: Nike Air Force 1 blanc EU42 = occasion 65-85 CHF selon état
-Exemple mauvais prix: 100 CHF (trop rond, inventé)
-Réponds UNIQUEMENT en JSON valide en CHF:
+Réponds UNIQUEMENT en JSON valide:
 {
   "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
   "marque": "marque exacte ou null",
@@ -871,4 +846,127 @@ app.post('/api/goat-prices', async (req, res) => {
     res.json({ success: false, error: error.message, prixMoyen: null, count: 0 });
   }
 });
+
+// ============================================
+// PRICECHARTING - Jeux vidéo, cartes, retro
+// ============================================
+app.post('/api/pricecharting-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const apiKey = process.env.PRICECHARTING_API_KEY;
+    if (!apiKey) {
+      // Fallback: scraping public endpoint
+      const response = await axios.get(
+        `https://www.pricecharting.com/api/product?id=${encodeURIComponent(query)}&status=used`,
+        { headers: { 'User-Agent': 'MYOBJEX/1.0' }, timeout: 8000 }
+      );
+      const data = response.data;
+      if (!data || data.status === 'error') return res.json({ success: false, prixMoyen: null, count: 0 });
+
+      const loose = Math.round((data['loose-price'] || 0) / 100);
+      const complete = Math.round((data['complete-price'] || 0) / 100);
+      const graded = Math.round((data['graded-price'] || 0) / 100);
+
+      return res.json({
+        success: true,
+        prixMoyen: loose || complete || null,
+        prixBas: loose ? Math.round(loose * 0.8) : null,
+        prixHaut: graded || complete || null,
+        loose, complete, graded,
+        count: loose ? 1 : 0,
+        source: 'pricecharting'
+      });
+    }
+
+    const response = await axios.get(
+      `https://www.pricecharting.com/api/products?q=${encodeURIComponent(query)}&api-key=${apiKey}`,
+      { timeout: 8000 }
+    );
+    const products = response.data?.products || [];
+    if (!products.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'pricecharting' });
+
+    const top = products[0];
+    const loose = Math.round((top['loose-price'] || 0) / 100);
+    const complete = Math.round((top['complete-price'] || 0) / 100);
+    const graded = Math.round((top['graded-price'] || 0) / 100);
+
+    res.json({
+      success: true,
+      prixMoyen: loose || complete || null,
+      prixBas: loose ? Math.round(loose * 0.8) : null,
+      prixHaut: graded || complete || (loose ? Math.round(loose * 1.3) : null),
+      loose, complete, graded,
+      productName: top['product-name'],
+      count: products.length,
+      source: 'pricecharting'
+    });
+  } catch (error) {
+    console.error('PriceCharting error:', error.message);
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'pricecharting' });
+  }
+});
+
+// ============================================
+// WORTHPOINT - Antiquités & objets de collection
+// ============================================
+app.post('/api/worthpoint-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const apiKey = process.env.WORTHPOINT_API_KEY;
+    if (!apiKey) {
+      // Sans clé: utilise eBay sold listings comme proxy antiquités
+      const token = await getEbayToken();
+      const response = await axios.get(
+        `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query + ' antique vintage')}&limit=10&filter=buyingOptions:{FIXED_PRICE}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-EBAY-C-MARKETPLACE-ID': 'EBAY_FR',
+          }
+        }
+      );
+      const items = response.data.itemSummaries || [];
+      if (!items.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint-fallback' });
+
+      const prices = items.map(i => parseFloat(i.price?.value || 0)).filter(p => p > 0);
+      const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+      return res.json({
+        success: true,
+        prixMoyen,
+        prixBas: Math.round(Math.min(...prices)),
+        prixHaut: Math.round(Math.max(...prices)),
+        count: prices.length,
+        source: 'worthpoint-fallback'
+      });
+    }
+
+    const response = await axios.get(
+      `https://api.worthpoint.com/v1/search?query=${encodeURIComponent(query)}&api_key=${apiKey}&limit=10`,
+      { timeout: 8000 }
+    );
+    const items = response.data?.results || [];
+    if (!items.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint' });
+
+    const prices = items.map(i => parseFloat(i.price || 0)).filter(p => p > 0);
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas: Math.round(Math.min(...prices)),
+      prixHaut: Math.round(Math.max(...prices)),
+      count: prices.length,
+      source: 'worthpoint'
+    });
+  } catch (error) {
+    console.error('WorthPoint error:', error.message);
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint' });
+  }
+});
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
