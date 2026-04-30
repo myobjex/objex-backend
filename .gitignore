@@ -1,3 +1,4 @@
 .env
 *.backup*
 server.js.backup2
+node_modules/
