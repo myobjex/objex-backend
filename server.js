@@ -63,7 +63,9 @@ RÈGLES IDENTIFICATION:
 2. Sois TRÈS précis: pas "sneaker Nike" mais "Nike Air Force 1 Low '07 White EU42"
 3. Si image floue/objet non identifiable: confiance < 40
 4. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans description
-5. Estime les prix en CHF comme référence indicative uniquement
+5. Pour les VEHICULES: utilise les vraies cotes argus suisses/françaises. Ex: Audi A4 2016 diesel occasion = 18000-25000 CHF selon km. Sois très précis sur l'année et la finition.
+6. Pour l'ELECTRONIQUE: prix basés sur les vrais marchés eBay/Back Market actuels
+7. Estime les prix en CHF comme référence du marché actuel 2025-2026
 
 Réponds UNIQUEMENT en JSON valide:
 {
