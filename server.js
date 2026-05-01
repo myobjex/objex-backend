@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const Anthropic = require('@anthropic-ai/sdk');
 const Groq = require('groq-sdk');
 require('dotenv').config();
 
@@ -9,8 +8,6 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
@@ -607,41 +604,46 @@ app.post('/api/catawiki-prices', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, objectContext } = req.body;
-    const response = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          {
-            role: 'system',
-            content: `Tu es l'IA experte de MYOBJEX, spécialisée UNIQUEMENT dans l'évaluation d'objets et le marché de revente.
+    const { messages, objectContext, userPlan } = req.body;
 
+    const systemPrompt = `Tu es l'IA experte de MYOBJEX, spécialisée UNIQUEMENT dans l'évaluation d'objets et le marché de revente.
 Objet analysé: ${objectContext.nom} (${objectContext.marque}). Catégorie: ${objectContext.categorie}. État: ${objectContext.etat}. Prix neuf: ${objectContext.prixNeuf} CHF, occasion: ${objectContext.prixOccasion} CHF.
+Tu réponds UNIQUEMENT aux questions sur la valeur, le prix, l'authenticité, où vendre/acheter, les tendances marché.
+Si hors sujet, réponds: "Je suis spécialisé uniquement dans l'évaluation d'objets. Scannez un objet pour que je vous aide ! 📷"
+Réponds en français, 2-3 phrases max, expert et concis, max 2 emojis.`;
 
-Tu réponds UNIQUEMENT aux questions sur:
-- La valeur, le prix, l'authenticité de l'objet
-- Où et comment vendre/acheter cet objet
-- Les tendances du marché de revente
-- Les plateformes recommandées (eBay, Vinted, StockX, etc.)
+    let reply, modelUsed;
 
-Si la question n'est PAS liée aux objets ou au marché de revente, réponds exactement: "Je suis spécialisé uniquement dans l'évaluation d'objets. Scannez un objet pour que je vous aide ! 📷"
+    if (userPlan === 'pro') {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        system: systemPrompt,
+        messages: messages.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.content || m.text })),
+      });
+      reply = response.content[0]?.text || 'Erreur IA.';
+      modelUsed = 'claude-haiku';
+    } else if (userPlan === 'standard') {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, ...messages], max_tokens: 300 },
+        { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+      modelUsed = 'groq-70b';
+    } else {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: systemPrompt }, ...messages], max_tokens: 200 },
+        { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+      modelUsed = 'groq-8b';
+    }
 
-Réponds en français, 2-3 phrases maximum, expert et concis, max 2 emojis.`
-          },
-          ...messages
-        ],
-        max_tokens: 200,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        }
-      }
-    );
-    const reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
-    res.json({ success: true, reply });
+    res.json({ success: true, reply, model: modelUsed });
   } catch (error) {
     console.error('Chat error:', error.message);
     res.json({ success: false, reply: 'Erreur serveur.' });
