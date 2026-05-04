@@ -346,9 +346,11 @@ app.post('/api/amazon-prices', async (req, res) => {
 
     if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
 
-    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-    const prixBas = Math.round(Math.min(...prices));
-    const prixHaut = Math.round(Math.max(...prices));
+    // Correction: si prix > 10000, probablement en centimes
+    const fixPrice = p => p > 10000 ? Math.round(p / 100) : Math.round(p);
+    const prixMoyen = fixPrice(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = fixPrice(Math.min(...prices));
+    const prixHaut = fixPrice(Math.max(...prices));
 
     const topItems = products.slice(0, 5).map(p => ({
       titre: p.product_title,
