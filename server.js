@@ -329,6 +329,7 @@ app.post('/api/amazon-prices', async (req, res) => {
           country: 'FR',
           sort_by: 'RELEVANCE',
           product_condition: 'USED',
+          sort_by: 'PRICE_LOW_TO_HIGH',
         },
         headers: {
           'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
