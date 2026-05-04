@@ -266,7 +266,7 @@ app.post('/api/ebay-prices', async (req, res) => {
     const token = await getEbayToken();
     
     const response = await axios.get(
-      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE}`,
+      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=20&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
       {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -328,7 +328,7 @@ app.post('/api/amazon-prices', async (req, res) => {
           page: '1',
           country: 'FR',
           sort_by: 'RELEVANCE',
-          product_condition: 'ALL',
+          product_condition: 'USED',
         },
         headers: {
           'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
@@ -980,7 +980,7 @@ app.post('/api/worthpoint-prices', async (req, res) => {
       // Sans clé: utilise eBay sold listings comme proxy antiquités
       const token = await getEbayToken();
       const response = await axios.get(
-        `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query + ' antique vintage')}&limit=10&filter=buyingOptions:{FIXED_PRICE}`,
+        `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query + ' antique vintage')}&limit=20&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

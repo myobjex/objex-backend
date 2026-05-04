@@ -1,15 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const Anthropic = require('@anthropic-ai/sdk');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 app.get('/api/health', (req, res) => {
@@ -18,55 +18,92 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/recognize-object', async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
+    const { imageBase64, countryCode = 'CH' } = req.body;
+
+    const COUNTRIES = {
+      CH: { currency: 'CHF', platforms: 'Ricardo.ch, Tutti.ch, Anibis.ch', context: 'Tu es en Suisse. Prix en CHF. Marché premium (+15% vs France).' },
+      FR: { currency: 'EUR', platforms: 'LeBonCoin, Vinted, eBay.fr', context: 'Tu es en France. Prix en euros.' },
+      DE: { currency: 'EUR', platforms: 'Kleinanzeigen, eBay.de, Rebuy', context: 'Du bist in Deutschland. Preise in Euro.' },
+      BE: { currency: 'EUR', platforms: '2ememain.be, Vinted BE', context: 'Tu es en Belgique. Prix en euros.' },
+      GB: { currency: 'GBP', platforms: 'Gumtree, eBay UK, Depop', context: 'You are in the UK. Prices in GBP.' },
+      US: { currency: 'USD', platforms: 'eBay, StockX, GOAT, Poshmark', context: 'You are in the US. Prices in USD.' },
+      MA: { currency: 'MAD', platforms: 'Avito.ma, Jumia.ma, Facebook Marketplace', context: 'Tu es au Maroc. Prix en MAD. Donne aussi le prix en EUR pour comparaison.' },
+      ES: { currency: 'EUR', platforms: 'Wallapop, Milanuncios, eBay.es', context: 'Estás en España. Precios en euros.' },
+      IT: { currency: 'EUR', platforms: 'Subito.it, eBay.it', context: 'Sei in Italia. Prezzi in euro.' },
+      NL: { currency: 'EUR', platforms: 'Marktplaats, Vinted NL', context: 'Je bent in Nederland. Prijzen in euro.' },
+      PT: { currency: 'EUR', platforms: 'OLX.pt, CustoJusto', context: 'Estás em Portugal. Preços em euros.' },
+      SE: { currency: 'SEK', platforms: 'Blocket, Tradera', context: 'Du är i Sverige. Priser i SEK.' },
+      AU: { currency: 'AUD', platforms: 'Gumtree AU, eBay AU', context: 'You are in Australia. Prices in AUD.' },
+      CA: { currency: 'CAD', platforms: 'Kijiji, Facebook Marketplace', context: 'You are in Canada. Prices in CAD.' },
+      JP: { currency: 'JPY', platforms: 'Mercari JP, Yahoo Auctions', context: 'You are in Japan. Prices in JPY.' },
+      SG: { currency: 'SGD', platforms: 'Carousell, Lazada', context: 'You are in Singapore. Prices in SGD.' },
+      ZA: { currency: 'ZAR', platforms: 'Gumtree ZA, OLX ZA', context: 'You are in South Africa. Prices in ZAR.' },
+      NG: { currency: 'NGN', platforms: 'Jiji.ng, Jumia NG', context: 'You are in Nigeria. Prices in NGN.' },
+      DZ: { currency: 'DZD', platforms: 'Ouedkniss, Facebook Marketplace', context: 'Tu es en Algérie. Prix en DZD.' },
+      TN: { currency: 'TND', platforms: 'Tayara.tn, Afrikha', context: 'Tu es en Tunisie. Prix en TND.' },
+      BR: { currency: 'BRL', platforms: 'Mercado Livre, OLX BR', context: 'Você está no Brasil. Preços em BRL.' },
+      MX: { currency: 'MXN', platforms: 'Mercado Libre, Facebook Marketplace', context: 'Estás en México. Precios en MXN.' },
+    };
+    const country = COUNTRIES[countryCode] || COUNTRIES['CH'];
+    const currency = country.currency;
+    const localPlatforms = country.platforms;
+    const localContext = country.context;
     if (!imageBase64) return res.json({ success: false, error: 'No image' });
 
     const mimeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    console.log('🔍 Appel Claude Vision...');
+    console.log('🔍 Appel Groq Vision...');
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       max_tokens: 1024,
-      messages: [{
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un expert en identification d'objets physiques. Tu analyses des images et retournes UNIQUEMENT un JSON valide, sans aucun texte avant ou après. Pas de markdown, pas d'explication. SEULEMENT le JSON brut. Tu identifies avec précision maximale: marque exacte, modèle exact, année, référence. Pour l'électronique Apple: distingue MacBook Air vs Pro, identifie la génération (M1/M2/M3/Intel), la taille d'écran. Pour les sneakers: marque + modèle + coloris exact. Confiance = 0-100 selon certitude d'identification.`
+        },
+        {
         role: 'user',
         content: [
           {
-            type: 'image',
-            source: { type: 'base64', media_type: mimeType, data: base64Data },
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64Data}` },
           },
           {
             type: 'text',
-            text: `Tu es un expert mondial en estimation et valorisation d'objets. Tu as une connaissance approfondie de:
-- MODE & SNEAKERS: prix StockX, GOAT, Vinted, eBay en temps réel
-- ÉLECTRONIQUE: prix Back Market, Amazon, Fnac, Apple Store
-- ANTIQUITÉS & BROCANTE: prix Catawiki, Drouot, maisons de ventes aux enchères
-- IMMOBILIER: prix au m² par ville et quartier
-- VÉHICULES: prix Argus, AutoScout24, cotes officielles
-- ART & ŒUVRES: prix galeries, enchères, artistes connus
-- MONTRES DE LUXE: prix Chrono24, WatchBox, marché secondaire
+            text: `${localContext}
 
-Analyse cette image et réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
-Sois EXTRÊMEMENT PRÉCIS sur les prix. Règles strictes:
-1. Si tu identifies l'objet avec certitude: donne le VRAI prix du marché actuel (pas une estimation vague)
-2. Pour sneakers: vérifie StockX/GOAT selon coloris et taille standard EU42
-3. Pour électronique: prix Back Market grade A ou Amazon marketplace
-4. Pour montres: prix Chrono24 ou WatchBox marché secondaire réel
-5. Pour antiquités: prix Catawiki ou Drouot dernières ventes
-6. Pour véhicules: cote Argus ou AutoScout24 selon année/km moyens
-7. JAMAIS de prix ronds inventés — préfère une fourchette précise
-8. Si objet inconnu ou image floue: confiance < 50 et prix conservateurs
-Exemple bon prix: Nike Air Force 1 blanc EU42 = occasion 65-85 CHF selon état
-Exemple mauvais prix: 100 CHF (trop rond, inventé)
-Réponds UNIQUEMENT en JSON valide en CHF:
+Tu es un expert mondial en IDENTIFICATION d'objets. Ton seul rôle est d'IDENTIFIER avec précision maximale. Les prix réels viennent d'APIs externes — tu estimes les prix uniquement comme référence indicative.
+
+Tu identifies TOUT:
+- MODE & SNEAKERS: marque, modèle exact, coloris, année, référence
+- ELECTRONIQUE: marque, modèle, génération, capacité, couleur
+- MONTRES: marque, référence exacte, mouvement, matériaux
+- VEHICULES: marque, modèle, année, finition
+- ANTIQUITÉS: époque, style, matériaux, origine probable
+- ART: artiste si connu, technique, période
+- NATURE: espèce exacte (nom latin), variété, comestibilité si champignon
+- SPORT: marque, modèle, sport concerné
+- GASTRONOMIE: produit, appellation, millésime si visible
+
+RÈGLES IDENTIFICATION:
+1. Utilise le web search pour confirmer le modèle exact si nécessaire
+2. Sois TRÈS précis: pas "sneaker Nike" mais "Nike Air Force 1 Low '07 White EU42"
+3. Si image floue/objet non identifiable: confiance < 40
+4. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans description
+5. Pour les VEHICULES: utilise les vraies cotes argus suisses/françaises. Ex: Audi A4 2016 diesel occasion = 18000-25000 CHF selon km. Sois très précis sur l'année et la finition.
+6. Pour l'ELECTRONIQUE: prix basés sur les vrais marchés eBay/Back Market actuels
+7. Estime les prix en CHF comme référence du marché actuel 2025-2026
+
+Réponds UNIQUEMENT en JSON valide:
 {
   "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
   "marque": "marque exacte ou null",
   "modele": "modèle précis avec référence si connue",
-  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|autre",
-  "etat": "excellent|bon|moyen|mauvais",
+  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|plante|champignon|animal|mineral|gastronomie|sport|autre",
+  "etat": "excellent|bon|moyen|mauvais|sauvage|cultivé|domestique",
   "epoque": "période, décennie ou année exacte si connue",
   "description": "description experte en français (max 25 mots)",
   "prix_neuf": prix CHF neuf ou valeur de référence (nombre entier),
@@ -93,10 +130,25 @@ Réponds UNIQUEMENT en JSON valide en CHF:
       }]
     });
 
-    const content = response.content[0].text;
-    console.log('✅ Claude response:', content);
+    // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
+    const rawText = response.choices[0].message.content;
+    console.log('✅ Groq response:', rawText.substring(0, 300));
 
-    const result = JSON.parse(content.replace(/```json|```/g, '').trim());
+    // Extraction robuste du JSON
+    let jsonStr = rawText;
+    // Cherche un bloc ```json ... ```
+    const codeMatch = rawText.match(/```json\s*([\s\S]*?)```/);
+    if (codeMatch) {
+      jsonStr = codeMatch[1].trim();
+    } else {
+      // Cherche le premier { jusqu'au dernier }
+      const start = rawText.indexOf('{');
+      const end = rawText.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        jsonStr = rawText.substring(start, end + 1);
+      }
+    }
+    const result = JSON.parse(jsonStr);
 
     res.json({
       success: true,
@@ -294,9 +346,11 @@ app.post('/api/amazon-prices', async (req, res) => {
 
     if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
 
-    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-    const prixBas = Math.round(Math.min(...prices));
-    const prixHaut = Math.round(Math.max(...prices));
+    // Correction: si prix > 10000, probablement en centimes
+    const fixPrice = p => p > 10000 ? Math.round(p / 100) : Math.round(p);
+    const prixMoyen = fixPrice(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = fixPrice(Math.min(...prices));
+    const prixHaut = fixPrice(Math.max(...prices));
 
     const topItems = products.slice(0, 5).map(p => ({
       titre: p.product_title,
@@ -584,45 +638,407 @@ app.post('/api/catawiki-prices', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, objectContext } = req.body;
-    const response = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          {
-            role: 'system',
-            content: `Tu es l'IA experte de MYOBJEX, spécialisée UNIQUEMENT dans l'évaluation d'objets et le marché de revente.
+    const { messages, objectContext, userPlan } = req.body;
 
+    const systemPrompt = `Tu es l'IA experte de MYOBJEX, spécialisée UNIQUEMENT dans l'évaluation d'objets et le marché de revente.
 Objet analysé: ${objectContext.nom} (${objectContext.marque}). Catégorie: ${objectContext.categorie}. État: ${objectContext.etat}. Prix neuf: ${objectContext.prixNeuf} CHF, occasion: ${objectContext.prixOccasion} CHF.
+Tu réponds UNIQUEMENT aux questions sur la valeur, le prix, l'authenticité, où vendre/acheter, les tendances marché.
+Si hors sujet, réponds: "Je suis spécialisé uniquement dans l'évaluation d'objets. Scannez un objet pour que je vous aide ! 📷"
+Réponds en français, 2-3 phrases max, expert et concis, max 2 emojis.`;
 
-Tu réponds UNIQUEMENT aux questions sur:
-- La valeur, le prix, l'authenticité de l'objet
-- Où et comment vendre/acheter cet objet
-- Les tendances du marché de revente
-- Les plateformes recommandées (eBay, Vinted, StockX, etc.)
+    let reply, modelUsed;
 
-Si la question n'est PAS liée aux objets ou au marché de revente, réponds exactement: "Je suis spécialisé uniquement dans l'évaluation d'objets. Scannez un objet pour que je vous aide ! 📷"
+    if (userPlan === 'pro') {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        system: systemPrompt,
+        messages: messages.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.content || m.text })),
+      });
+      reply = response.content[0]?.text || 'Erreur IA.';
+      modelUsed = 'claude-haiku';
+    } else if (userPlan === 'standard') {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, ...messages], max_tokens: 300 },
+        { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+      modelUsed = 'groq-70b';
+    } else {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: systemPrompt }, ...messages], max_tokens: 200 },
+        { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+      modelUsed = 'groq-8b';
+    }
 
-Réponds en français, 2-3 phrases maximum, expert et concis, max 2 emojis.`
-          },
-          ...messages
-        ],
-        max_tokens: 200,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        }
-      }
-    );
-    const reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
-    res.json({ success: true, reply });
+    res.json({ success: true, reply, model: modelUsed });
   } catch (error) {
     console.error('Chat error:', error.message);
     res.json({ success: false, reply: 'Erreur serveur.' });
   }
 });
+
+// ========== LEBONCOIN ==========
+app.post('/api/leboncoin-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+
+    console.log('🔍 Fetching LeBonCoin prices for:', query);
+    
+    try {
+      const axios = require('axios');
+      const url = `https://www.leboncoin.fr/recherche?text=${encodeURIComponent(query)}`;
+      
+      const response = await axios.get(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 5000
+      });
+      
+      // Simple regex to extract prices from HTML
+      const priceRegex = /data-listing-price="([0-9]+)"/g;
+      const prices = [];
+      let match;
+      while ((match = priceRegex.exec(response.data)) !== null) {
+        prices.push(parseInt(match[1]));
+      }
+      
+      if (prices.length === 0) {
+        return res.json({ success: false, prixMoyen: null, prixBas: null, prixHaut: null, count: 0 });
+      }
+      
+      const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+      
+      res.json({
+        success: true,
+        prixMoyen: prixMoyen,
+        prixBas: Math.min(...prices),
+        prixHaut: Math.max(...prices),
+        count: prices.length,
+        items: [],
+        source: 'leboncoin'
+      });
+    } catch (apiError) {
+      console.warn('LeBonCoin scraping failed, using fallback:', apiError.message);
+      res.json({
+        success: false,
+        prixMoyen: null,
+        prixBas: null,
+        prixHaut: null,
+        count: 0,
+        source: 'leboncoin'
+      });
+    }
+  } catch (error) {
+    console.error('LeBonCoin endpoint error:', error.message);
+    res.json({ success: false, error: error.message, prixMoyen: null, count: 0 });
+  }
+});
+
+// ========== RICARDO ==========
+app.post('/api/ricardo-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+
+    console.log('🔍 Fetching Ricardo prices for:', query);
+    
+    try {
+      const axios = require('axios');
+      const url = `https://www.ricardo.ch/de/s/${encodeURIComponent(query)}`;
+      
+      const response = await axios.get(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 5000
+      });
+      
+      // Simple regex to extract prices from HTML
+      const priceRegex = /CHF ([0-9]+[.,][0-9]+)/g;
+      const prices = [];
+      let match;
+      while ((match = priceRegex.exec(response.data)) !== null) {
+        prices.push(parseInt(match[1].replace(/[.,]/, '')));
+      }
+      
+      if (prices.length === 0) {
+        return res.json({ success: false, prixMoyen: null, prixBas: null, prixHaut: null, count: 0 });
+      }
+      
+      const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+      
+      res.json({
+        success: true,
+        prixMoyen: prixMoyen,
+        prixBas: Math.min(...prices),
+        prixHaut: Math.max(...prices),
+        count: prices.length,
+        items: [],
+        source: 'ricardo'
+      });
+    } catch (apiError) {
+      console.warn('Ricardo scraping failed, using fallback:', apiError.message);
+      res.json({
+        success: false,
+        prixMoyen: null,
+        prixBas: null,
+        prixHaut: null,
+        count: 0,
+        source: 'ricardo'
+      });
+    }
+  } catch (error) {
+    console.error('Ricardo endpoint error:', error.message);
+    res.json({ success: false, error: error.message, prixMoyen: null, count: 0 });
+  }
+});
+
+// ========== STOCKX ==========
+app.post('/api/stockx-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+
+    console.log('🔍 Fetching StockX prices for:', query);
+    
+    try {
+      const axios = require('axios');
+      const response = await axios.get('https://sneaker-database-stockx.p.rapidapi.com/search', {
+        params: { query: query },
+        headers: {
+          'x-rapidapi-host': 'sneaker-database-stockx.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY
+        },
+        timeout: 5000
+      });
+      
+      const items = response.data?.results || [];
+      const prices = items.map(item => item.price).filter(p => p && !isNaN(p));
+      
+      if (prices.length === 0) {
+        return res.json({ success: false, prixMoyen: null, prixBas: null, prixHaut: null, count: 0 });
+      }
+      
+      const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+      
+      res.json({
+        success: true,
+        prixMoyen: prixMoyen,
+        prixBas: Math.min(...prices),
+        prixHaut: Math.max(...prices),
+        count: prices.length,
+        items: items.slice(0, 5),
+        source: 'stockx'
+      });
+    } catch (apiError) {
+      console.warn('StockX API failed, using fallback:', apiError.message);
+      res.json({
+        success: false,
+        prixMoyen: null,
+        prixBas: null,
+        prixHaut: null,
+        count: 0,
+        source: 'stockx'
+      });
+    }
+  } catch (error) {
+    console.error('StockX endpoint error:', error.message);
+    res.json({ success: false, error: error.message, prixMoyen: null, count: 0 });
+  }
+});
+
+// ========== GOAT ==========
+app.post('/api/goat-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+
+    console.log('🔍 Fetching GOAT prices for:', query);
+    
+    try {
+      const axios = require('axios');
+      const response = await axios.get('https://sneaker-database-stockx.p.rapidapi.com/search', {
+        params: { query: query, source: 'goat' },
+        headers: {
+          'x-rapidapi-host': 'sneaker-database-stockx.p.rapidapi.com',
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY
+        },
+        timeout: 5000
+      });
+      
+      const items = response.data?.results || [];
+      const prices = items.map(item => item.price).filter(p => p && !isNaN(p));
+      
+      if (prices.length === 0) {
+        return res.json({ success: false, prixMoyen: null, prixBas: null, prixHaut: null, count: 0 });
+      }
+      
+      const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+      
+      res.json({
+        success: true,
+        prixMoyen: prixMoyen,
+        prixBas: Math.min(...prices),
+        prixHaut: Math.max(...prices),
+        count: prices.length,
+        items: items.slice(0, 5),
+        source: 'goat'
+      });
+    } catch (apiError) {
+      console.warn('GOAT API failed, using fallback:', apiError.message);
+      res.json({
+        success: false,
+        prixMoyen: null,
+        prixBas: null,
+        prixHaut: null,
+        count: 0,
+        source: 'goat'
+      });
+    }
+  } catch (error) {
+    console.error('GOAT endpoint error:', error.message);
+    res.json({ success: false, error: error.message, prixMoyen: null, count: 0 });
+  }
+});
+
+// ============================================
+// PRICECHARTING - Jeux vidéo, cartes, retro
+// ============================================
+app.post('/api/pricecharting-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const apiKey = process.env.PRICECHARTING_API_KEY;
+    if (!apiKey) {
+      // Fallback: scraping public endpoint
+      const response = await axios.get(
+        `https://www.pricecharting.com/api/product?id=${encodeURIComponent(query)}&status=used`,
+        { headers: { 'User-Agent': 'MYOBJEX/1.0' }, timeout: 8000 }
+      );
+      const data = response.data;
+      if (!data || data.status === 'error') return res.json({ success: false, prixMoyen: null, count: 0 });
+
+      const loose = Math.round((data['loose-price'] || 0) / 100);
+      const complete = Math.round((data['complete-price'] || 0) / 100);
+      const graded = Math.round((data['graded-price'] || 0) / 100);
+
+      return res.json({
+        success: true,
+        prixMoyen: loose || complete || null,
+        prixBas: loose ? Math.round(loose * 0.8) : null,
+        prixHaut: graded || complete || null,
+        loose, complete, graded,
+        count: loose ? 1 : 0,
+        source: 'pricecharting'
+      });
+    }
+
+    const response = await axios.get(
+      `https://www.pricecharting.com/api/products?q=${encodeURIComponent(query)}&api-key=${apiKey}`,
+      { timeout: 8000 }
+    );
+    const products = response.data?.products || [];
+    if (!products.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'pricecharting' });
+
+    const top = products[0];
+    const loose = Math.round((top['loose-price'] || 0) / 100);
+    const complete = Math.round((top['complete-price'] || 0) / 100);
+    const graded = Math.round((top['graded-price'] || 0) / 100);
+
+    res.json({
+      success: true,
+      prixMoyen: loose || complete || null,
+      prixBas: loose ? Math.round(loose * 0.8) : null,
+      prixHaut: graded || complete || (loose ? Math.round(loose * 1.3) : null),
+      loose, complete, graded,
+      productName: top['product-name'],
+      count: products.length,
+      source: 'pricecharting'
+    });
+  } catch (error) {
+    console.error('PriceCharting error:', error.message);
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'pricecharting' });
+  }
+});
+
+// ============================================
+// WORTHPOINT - Antiquités & objets de collection
+// ============================================
+app.post('/api/worthpoint-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const apiKey = process.env.WORTHPOINT_API_KEY;
+    if (!apiKey) {
+      // Sans clé: utilise eBay sold listings comme proxy antiquités
+      const token = await getEbayToken();
+      const response = await axios.get(
+        `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query + ' antique vintage')}&limit=10&filter=buyingOptions:{FIXED_PRICE}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-EBAY-C-MARKETPLACE-ID': 'EBAY_FR',
+          }
+        }
+      );
+      const items = response.data.itemSummaries || [];
+      if (!items.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint-fallback' });
+
+      const prices = items.map(i => parseFloat(i.price?.value || 0)).filter(p => p > 0);
+      const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+      return res.json({
+        success: true,
+        prixMoyen,
+        prixBas: Math.round(Math.min(...prices)),
+        prixHaut: Math.round(Math.max(...prices)),
+        count: prices.length,
+        source: 'worthpoint-fallback'
+      });
+    }
+
+    const response = await axios.get(
+      `https://api.worthpoint.com/v1/search?query=${encodeURIComponent(query)}&api_key=${apiKey}&limit=10`,
+      { timeout: 8000 }
+    );
+    const items = response.data?.results || [];
+    if (!items.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint' });
+
+    const prices = items.map(i => parseFloat(i.price || 0)).filter(p => p > 0);
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas: Math.round(Math.min(...prices)),
+      prixHaut: Math.round(Math.max(...prices)),
+      count: prices.length,
+      source: 'worthpoint'
+    });
+  } catch (error) {
+    console.error('WorthPoint error:', error.message);
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint' });
+  }
+});
+
+// Keep-alive ping toutes les 14 minutes (Render free tier)
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://objex-backend.onrender.com';
+setInterval(async () => {
+  try {
+    const http = require('https');
+    http.get(SELF_URL + '/health', (res) => {
+      console.log('🏓 Keep-alive ping OK:', res.statusCode);
+    }).on('error', () => {});
+  } catch(e) {}
+}, 14 * 60 * 1000);
+
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
