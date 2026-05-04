@@ -8,7 +8,6 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-});
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
