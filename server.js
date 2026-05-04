@@ -19,7 +19,36 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/recognize-object', async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
+    const { imageBase64, countryCode = 'CH' } = req.body;
+
+    const COUNTRIES = {
+      CH: { currency: 'CHF', platforms: 'Ricardo.ch, Tutti.ch, Anibis.ch', context: 'Tu es en Suisse. Prix en CHF. Marché premium (+15% vs France).' },
+      FR: { currency: 'EUR', platforms: 'LeBonCoin, Vinted, eBay.fr', context: 'Tu es en France. Prix en euros.' },
+      DE: { currency: 'EUR', platforms: 'Kleinanzeigen, eBay.de, Rebuy', context: 'Du bist in Deutschland. Preise in Euro.' },
+      BE: { currency: 'EUR', platforms: '2ememain.be, Vinted BE', context: 'Tu es en Belgique. Prix en euros.' },
+      GB: { currency: 'GBP', platforms: 'Gumtree, eBay UK, Depop', context: 'You are in the UK. Prices in GBP.' },
+      US: { currency: 'USD', platforms: 'eBay, StockX, GOAT, Poshmark', context: 'You are in the US. Prices in USD.' },
+      MA: { currency: 'MAD', platforms: 'Avito.ma, Jumia.ma, Facebook Marketplace', context: 'Tu es au Maroc. Prix en MAD. Donne aussi le prix en EUR pour comparaison.' },
+      ES: { currency: 'EUR', platforms: 'Wallapop, Milanuncios, eBay.es', context: 'Estás en España. Precios en euros.' },
+      IT: { currency: 'EUR', platforms: 'Subito.it, eBay.it', context: 'Sei in Italia. Prezzi in euro.' },
+      NL: { currency: 'EUR', platforms: 'Marktplaats, Vinted NL', context: 'Je bent in Nederland. Prijzen in euro.' },
+      PT: { currency: 'EUR', platforms: 'OLX.pt, CustoJusto', context: 'Estás em Portugal. Preços em euros.' },
+      SE: { currency: 'SEK', platforms: 'Blocket, Tradera', context: 'Du är i Sverige. Priser i SEK.' },
+      AU: { currency: 'AUD', platforms: 'Gumtree AU, eBay AU', context: 'You are in Australia. Prices in AUD.' },
+      CA: { currency: 'CAD', platforms: 'Kijiji, Facebook Marketplace', context: 'You are in Canada. Prices in CAD.' },
+      JP: { currency: 'JPY', platforms: 'Mercari JP, Yahoo Auctions', context: 'You are in Japan. Prices in JPY.' },
+      SG: { currency: 'SGD', platforms: 'Carousell, Lazada', context: 'You are in Singapore. Prices in SGD.' },
+      ZA: { currency: 'ZAR', platforms: 'Gumtree ZA, OLX ZA', context: 'You are in South Africa. Prices in ZAR.' },
+      NG: { currency: 'NGN', platforms: 'Jiji.ng, Jumia NG', context: 'You are in Nigeria. Prices in NGN.' },
+      DZ: { currency: 'DZD', platforms: 'Ouedkniss, Facebook Marketplace', context: 'Tu es en Algérie. Prix en DZD.' },
+      TN: { currency: 'TND', platforms: 'Tayara.tn, Afrikha', context: 'Tu es en Tunisie. Prix en TND.' },
+      BR: { currency: 'BRL', platforms: 'Mercado Livre, OLX BR', context: 'Você está no Brasil. Preços em BRL.' },
+      MX: { currency: 'MXN', platforms: 'Mercado Libre, Facebook Marketplace', context: 'Estás en México. Precios en MXN.' },
+    };
+    const country = COUNTRIES[countryCode] || COUNTRIES['CH'];
+    const currency = country.currency;
+    const localPlatforms = country.platforms;
+    const localContext = country.context;
     if (!imageBase64) return res.json({ success: false, error: 'No image' });
 
     const mimeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
@@ -45,7 +74,9 @@ app.post('/api/recognize-object', async (req, res) => {
           },
           {
             type: 'text',
-            text: `Tu es un expert mondial en IDENTIFICATION d'objets. Ton seul rôle est d'IDENTIFIER avec précision maximale. Les prix réels viennent d'APIs externes — tu estimes les prix uniquement comme référence indicative.
+            text: `${localContext}
+
+Tu es un expert mondial en IDENTIFICATION d'objets. Ton seul rôle est d'IDENTIFIER avec précision maximale. Les prix réels viennent d'APIs externes — tu estimes les prix uniquement comme référence indicative.
 
 Tu identifies TOUT:
 - MODE & SNEAKERS: marque, modèle exact, coloris, année, référence
