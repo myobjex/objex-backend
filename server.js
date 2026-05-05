@@ -62,7 +62,7 @@ app.post('/api/recognize-object', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: `Tu es un expert en identification d'objets physiques. Tu analyses des images et retournes UNIQUEMENT un JSON valide, sans aucun texte avant ou après. Pas de markdown, pas d'explication. SEULEMENT le JSON brut. Tu identifies avec précision maximale: marque exacte, modèle exact, année, référence. Pour l'électronique Apple: distingue MacBook Air vs Pro, identifie la génération (M1/M2/M3/Intel), la taille d'écran. Pour les sneakers: marque + modèle + coloris exact. Confiance = 0-100 selon certitude d'identification.`
+          content: `Tu es un expert en identification d'objets physiques. Tu analyses des images et retournes UNIQUEMENT un JSON valide, sans aucun texte avant ou après. Pas de markdown, pas d'explication. SEULEMENT le JSON brut. Tu identifies avec précision maximale: marque exacte, modèle exact, année, référence. Pour l'électronique Apple: distingue MacBook Air vs Pro, identifie la génération (M1/M2/M3/Intel), la taille d'écran (13, 14, 15, 16 pouces - regarde la proportion du clavier et de l'écran dans l'image pour estimer la taille). IMPORTANT: un MacBook Pro 16 pouces est notablement plus grand qu'un 13 pouces, le ratio écran/clavier est différent. En cas de doute sur la taille exact mets le dans la description mais ne te trompe pas de gamme (Air vs Pro). Pour les sneakers: marque + modèle + coloris exact. Confiance = 0-100 selon certitude d'identification.`
         },
         {
         role: 'user',
