@@ -1,4 +1,8 @@
 const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
+const Groq = require('groq-sdk');
+require('dotenv').config();
 
 const EBAY_MARKETPLACE = {
   CH: 'EBAY_CH',
@@ -14,11 +18,6 @@ const EBAY_MARKETPLACE = {
   AU: 'EBAY_AU',
   CA: 'EBAY_CA',
 };
-
-const cors = require('cors');
-const axios = require('axios');
-const Groq = require('groq-sdk');
-require('dotenv').config();
 
 const app = express();
 app.use(cors({ origin: '*' }));
