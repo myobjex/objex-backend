@@ -137,9 +137,9 @@ RÈGLES IDENTIFICATION:
 
 Réponds UNIQUEMENT en JSON valide:
 {
-  "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
-  "marque": "marque exacte ou null",
-  "modele": "modèle précis avec référence si connue",
+  "nom": "nom exact et complet (marque + modèle) — NE PAS écrire la string null, utiliser null JSON si inconnu",
+  "marque": "marque exacte (string) ou null (JSON null si inconnue)",
+  "modele": "modèle précis avec référence si connue (null si inconnu)",
   "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|plante|champignon|animal|mineral|gastronomie|sport|autre",
   "etat": "excellent|bon|moyen|mauvais|sauvage|cultivé|domestique",
   "epoque": "période, décennie ou année exacte si connue",
