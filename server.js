@@ -16,7 +16,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.2.0', timestamp: new Date().toISOString() });
 });
 
-app.post('/api/recognize-object', async (req, res) => {
+app.post('/api/recognize-object', authenticateRequest, rateLimit, async (req, res) => {
   try {
     const { imageBase64, countryCode = 'CH' } = req.body;
 
@@ -637,7 +637,7 @@ app.post('/api/catawiki-prices', async (req, res) => {
   }
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', authenticateRequest, rateLimit, async (req, res) => {
   try {
     const { messages, objectContext, userPlan } = req.body;
 
