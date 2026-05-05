@@ -27,6 +27,29 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+
+// Middleware authentification
+const authenticateRequest = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== process.env.ARIZ_API_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
+// Rate limiting
+const requestCounts = {};
+const rateLimit = (req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  if (!requestCounts[ip]) requestCounts[ip] = [];
+  requestCounts[ip] = requestCounts[ip].filter(t => now - t < 60000);
+  if (requestCounts[ip].length >= 30) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  requestCounts[ip].push(now);
+  next();
+};
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.2.0', timestamp: new Date().toISOString() });
 });
