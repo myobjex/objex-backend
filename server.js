@@ -1,4 +1,20 @@
 const express = require('express');
+
+const EBAY_MARKETPLACE = {
+  CH: 'EBAY_CH',
+  FR: 'EBAY_FR',
+  DE: 'EBAY_DE',
+  GB: 'EBAY_GB',
+  US: 'EBAY_US',
+  IT: 'EBAY_IT',
+  ES: 'EBAY_ES',
+  BE: 'EBAY_BE',
+  NL: 'EBAY_NL',
+  AT: 'EBAY_AT',
+  AU: 'EBAY_AU',
+  CA: 'EBAY_CA',
+};
+
 const cors = require('cors');
 const axios = require('axios');
 const Groq = require('groq-sdk');
