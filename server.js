@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const EBAY_MARKETPLACE = {
@@ -23,7 +23,7 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 
 // Middleware authentification
@@ -90,10 +90,15 @@ app.post('/api/recognize-object', authenticateRequest, rateLimit, async (req, re
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    console.log('🔍 Appel Gemini Vision...');
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
-    const imagePart = { inlineData: { data: base64Data, mimeType } };
-    const prompt_text = `${localContext}
+    console.log('🔍 Appel Groq Maverick Vision...');
+    const response = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+          { type: 'text', text: `${localContext}
 
 Tu es un expert mondial en IDENTIFICATION d'objets. Réponds UNIQUEMENT en JSON valide sans markdown ni backticks.
 
@@ -118,10 +123,12 @@ Format EXACT:
   "plateformes": [],
   "prix_plateformes": {"Vinted":null,"eBay":null,"Amazon":null,"Back Market":null,"StockX":null,"GOAT":null,"LeBonCoin":null,"Vestiaire Collectif":null,"Catawiki":null,"Chrono24":null}
 }
-`;
-    const geminiResponse = await model.generateContent([prompt_text, imagePart]);
-    const rawText = geminiResponse.response.text();
-    console.log('✅ Gemini response:', rawText.substring(0, 300));
+`
+        }]
+      }]
+    });
+    const rawText = response.choices[0].message.content;
+    console.log('✅ Groq Maverick response:', rawText.substring(0, 300));
 
     // Extraction robuste du JSON
     let jsonStr = rawText;
