@@ -91,7 +91,7 @@ app.post('/api/recognize-object', authenticateRequest, rateLimit, async (req, re
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
     console.log('🔍 Appel Gemini Vision...');
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
     const imagePart = { inlineData: { data: base64Data, mimeType } };
     const prompt_text = `${localContext}
 
