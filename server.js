@@ -23,7 +23,9 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 
 // Middleware authentification
@@ -90,45 +92,85 @@ app.post('/api/recognize-object', authenticateRequest, rateLimit, async (req, re
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    console.log('🔍 Appel Groq Maverick Vision...');
+    console.log('🔍 Appel Groq Vision...');
+
     const response = await groq.chat.completions.create({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       max_tokens: 1024,
-      messages: [{
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un expert en identification d'objets physiques. Tu analyses des images et retournes UNIQUEMENT un JSON valide, sans aucun texte avant ou après. Pas de markdown, pas d'explication. SEULEMENT le JSON brut. Tu identifies avec précision maximale: marque exacte, modèle exact, année, référence. Pour l'électronique Apple: distingue MacBook Air vs Pro, identifie la génération (M1/M2/M3/Intel), la taille d'écran (13, 14, 15, 16 pouces - regarde la proportion du clavier et de l'écran dans l'image pour estimer la taille). IMPORTANT: un MacBook Pro 16 pouces est notablement plus grand qu'un 13 pouces, le ratio écran/clavier est différent. En cas de doute sur la taille exact mets le dans la description mais ne te trompe pas de gamme (Air vs Pro). Pour les sneakers: marque + modèle + coloris exact. Confiance = 0-100 selon certitude d'identification.`
+        },
+        {
         role: 'user',
         content: [
-          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
-          { type: 'text', text: `${localContext}
+          {
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64Data}` },
+          },
+          {
+            type: 'text',
+            text: `${localContext}
 
-Tu es un expert mondial en IDENTIFICATION d'objets. Réponds UNIQUEMENT en JSON valide sans markdown ni backticks.
+Tu es un expert mondial en IDENTIFICATION d'objets. Ton seul rôle est d'IDENTIFIER avec précision maximale. Les prix réels viennent d'APIs externes — tu estimes les prix uniquement comme référence indicative.
 
-Tu identifies TOUT: MODE, SNEAKERS, ELECTRONIQUE, MONTRES, VEHICULES, ANTIQUITES, ART, NATURE, SPORT, GASTRONOMIE.
-Sois TRÈS précis: pas 'sneaker Nike' mais 'Nike Air Force 1 Low 07 White EU42'.
-Prix en CHF. Si inconnu: null (JSON null, pas la string null).
+Tu identifies TOUT:
+- MODE & SNEAKERS: marque, modèle exact, coloris, année, référence
+- ELECTRONIQUE: marque, modèle, génération, capacité, couleur
+- MONTRES: marque, référence exacte, mouvement, matériaux
+- VEHICULES: marque, modèle, année, finition
+- ANTIQUITÉS: époque, style, matériaux, origine probable
+- ART: artiste si connu, technique, période
+- NATURE: espèce exacte (nom latin), variété, comestibilité si champignon
+- SPORT: marque, modèle, sport concerné
+- GASTRONOMIE: produit, appellation, millésime si visible
 
-Format EXACT:
+RÈGLES IDENTIFICATION:
+1. Utilise le web search pour confirmer le modèle exact si nécessaire
+2. Sois TRÈS précis: pas "sneaker Nike" mais "Nike Air Force 1 Low '07 White EU42"
+3. Si image floue/objet non identifiable: confiance < 40
+4. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans description
+5. Pour les VEHICULES: utilise les vraies cotes argus suisses/françaises. Ex: Audi A4 2016 diesel occasion = 18000-25000 CHF selon km. Sois très précis sur l'année et la finition.
+6. Pour l'ELECTRONIQUE: prix basés sur les vrais marchés eBay/Back Market actuels
+7. Estime les prix en CHF comme référence du marché actuel 2025-2026
+
+Réponds UNIQUEMENT en JSON valide:
 {
-  "nom": "nom complet ou null",
-  "marque": "marque exacte ou null",
-  "modele": "modele precis ou null",
+  "nom": "nom exact et complet (marque + modèle) — NE PAS écrire la string null, utiliser null JSON si inconnu",
+  "marque": "marque exacte (string) ou null (JSON null si inconnue)",
+  "modele": "modèle précis avec référence si connue (null si inconnu)",
   "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|plante|champignon|animal|mineral|gastronomie|sport|autre",
-  "etat": "excellent|bon|moyen|mauvais|sauvage|cultive|domestique",
-  "epoque": "periode ou null",
-  "description": "description experte max 25 mots",
-  "prix_neuf": null,
-  "prix_occasion": null,
-  "prix_bas": null,
-  "prix_haut": null,
-  "confiance": 0,
-  "plateformes": [],
-  "prix_plateformes": {"Vinted":null,"eBay":null,"Amazon":null,"Back Market":null,"StockX":null,"GOAT":null,"LeBonCoin":null,"Vestiaire Collectif":null,"Catawiki":null,"Chrono24":null}
-}
-`
-        }]
+  "etat": "excellent|bon|moyen|mauvais|sauvage|cultivé|domestique",
+  "epoque": "période, décennie ou année exacte si connue",
+  "description": "description experte en français (max 25 mots)",
+  "prix_neuf": prix CHF neuf ou valeur de référence (nombre entier),
+  "prix_occasion": prix CHF marché occasion actuel (nombre entier),
+  "prix_bas": estimation basse du marché (nombre entier),
+  "prix_haut": estimation haute du marché (nombre entier),
+  "confiance": niveau de confiance 0-100,
+  "plateformes": ["meilleures plateformes spécifiques à cet objet pour vendre"],
+  "prix_plateformes": {
+    "Vinted": prix estimé occasion sur Vinted en CHF (nombre entier ou null),
+    "eBay": prix estimé occasion sur eBay en CHF (nombre entier ou null),
+    "Amazon": prix estimé neuf/occasion sur Amazon en CHF (nombre entier ou null),
+    "Back Market": prix estimé reconditionné sur Back Market en CHF (nombre entier ou null),
+    "StockX": prix estimé sur StockX en CHF (nombre entier ou null si pas applicable),
+    "GOAT": prix estimé sur GOAT en CHF (nombre entier ou null si pas applicable),
+    "LeBonCoin": prix estimé sur LeBonCoin en CHF (nombre entier ou null),
+    "Vestiaire Collectif": prix estimé sur Vestiaire Collectif en CHF (nombre entier ou null si pas applicable),
+    "Catawiki": prix estimé sur Catawiki en CHF (nombre entier ou null si pas applicable),
+    "Chrono24": prix estimé sur Chrono24 en CHF (nombre entier ou null si pas applicable)
+  }
+}`
+          }
+        ]
       }]
     });
+
+    // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
     const rawText = response.choices[0].message.content;
-    console.log('✅ Groq Maverick response:', rawText.substring(0, 300));
+    console.log('✅ Groq response:', rawText.substring(0, 300));
 
     // Extraction robuste du JSON
     let jsonStr = rawText;
@@ -1034,7 +1076,7 @@ setInterval(async () => {
       console.log('🏓 Keep-alive ping OK:', res.statusCode);
     }).on('error', () => {});
   } catch(e) {}
-}, 10 * 60 * 1000);
+}, 14 * 60 * 1000);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
