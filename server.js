@@ -1027,7 +1027,7 @@ setInterval(async () => {
       console.log('🏓 Keep-alive ping OK:', res.statusCode);
     }).on('error', () => {});
   } catch(e) {}
-}, 14 * 60 * 1000);
+}, 10 * 60 * 1000);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
