@@ -214,7 +214,7 @@ Réponds UNIQUEMENT en JSON valide:
   }
 });
 
-app.post('/api/search-prices', async (req, res) => {
+app.post('/api/search-prices', authenticateRequest, async (req, res) => {
   const { productName, categorie, prixNeuf, prixOccasion } = req.body;
 
   const encode = (s) => encodeURIComponent(s);
@@ -296,7 +296,7 @@ async function getEbayToken() {
   return _ebayToken;
 }
 
-app.post('/api/ebay-prices', async (req, res) => {
+app.post('/api/ebay-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -375,7 +375,7 @@ app.post('/api/ebay-prices', async (req, res) => {
 });
 
 
-app.post('/api/amazon-prices', async (req, res) => {
+app.post('/api/amazon-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -437,7 +437,7 @@ app.post('/api/amazon-prices', async (req, res) => {
 });
 
 
-app.post('/api/autoscout-prices', async (req, res) => {
+app.post('/api/autoscout-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -494,7 +494,7 @@ app.post('/api/autoscout-prices', async (req, res) => {
 });
 
 
-app.post('/api/vinted-prices', async (req, res) => {
+app.post('/api/vinted-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -552,7 +552,7 @@ app.post('/api/vinted-prices', async (req, res) => {
 });
 
 
-app.post('/api/etsy-prices', async (req, res) => {
+app.post('/api/etsy-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -604,7 +604,7 @@ app.post('/api/etsy-prices', async (req, res) => {
 });
 
 
-app.post('/api/chrono24-prices', async (req, res) => {
+app.post('/api/chrono24-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -649,7 +649,7 @@ app.post('/api/chrono24-prices', async (req, res) => {
 });
 
 
-app.post('/api/catawiki-prices', async (req, res) => {
+app.post('/api/catawiki-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -746,7 +746,7 @@ Réponds en français, 2-3 phrases max, expert et concis, max 2 emojis.`;
 });
 
 // ========== LEBONCOIN ==========
-app.post('/api/leboncoin-prices', async (req, res) => {
+app.post('/api/leboncoin-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -803,7 +803,7 @@ app.post('/api/leboncoin-prices', async (req, res) => {
 });
 
 // ========== RICARDO ==========
-app.post('/api/ricardo-prices', async (req, res) => {
+app.post('/api/ricardo-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -860,7 +860,7 @@ app.post('/api/ricardo-prices', async (req, res) => {
 });
 
 // ========== STOCKX ==========
-app.post('/api/stockx-prices', async (req, res) => {
+app.post('/api/stockx-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -914,7 +914,7 @@ app.post('/api/stockx-prices', async (req, res) => {
 });
 
 // ========== GOAT ==========
-app.post('/api/goat-prices', async (req, res) => {
+app.post('/api/goat-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -970,7 +970,7 @@ app.post('/api/goat-prices', async (req, res) => {
 // ============================================
 // PRICECHARTING - Jeux vidéo, cartes, retro
 // ============================================
-app.post('/api/pricecharting-prices', async (req, res) => {
+app.post('/api/pricecharting-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -1031,7 +1031,7 @@ app.post('/api/pricecharting-prices', async (req, res) => {
 // ============================================
 // WORTHPOINT - Antiquités & objets de collection
 // ============================================
-app.post('/api/worthpoint-prices', async (req, res) => {
+app.post('/api/worthpoint-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -1093,7 +1093,7 @@ app.post('/api/worthpoint-prices', async (req, res) => {
 // ============================================
 // AVITO MAROC
 // ============================================
-app.post('/api/avito-prices', async (req, res) => {
+app.post('/api/avito-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -1120,7 +1120,7 @@ app.post('/api/avito-prices', async (req, res) => {
 // ============================================
 // KLEINANZEIGEN (Allemagne)
 // ============================================
-app.post('/api/kleinanzeigen-prices', async (req, res) => {
+app.post('/api/kleinanzeigen-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -1147,7 +1147,7 @@ app.post('/api/kleinanzeigen-prices', async (req, res) => {
 // ============================================
 // WALLAPOP (Espagne)
 // ============================================
-app.post('/api/wallapop-prices', async (req, res) => {
+app.post('/api/wallapop-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -1169,7 +1169,7 @@ app.post('/api/wallapop-prices', async (req, res) => {
 // ============================================
 // TUTTI.CH (Suisse)
 // ============================================
-app.post('/api/tutti-prices', async (req, res) => {
+app.post('/api/tutti-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -1197,7 +1197,7 @@ app.post('/api/tutti-prices', async (req, res) => {
 // ============================================
 // PRIX PAR PAYS - endpoint intelligent
 // ============================================
-app.post('/api/prices-by-country', async (req, res) => {
+app.post('/api/prices-by-country', authenticateRequest, async (req, res) => {
   try {
     const { query, countryCode = 'CH' } = req.body;
     if (!query) return res.json({ success: false, results: [] });
