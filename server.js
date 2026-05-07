@@ -209,7 +209,52 @@ Réponds UNIQUEMENT en JSON valide:
     });
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ Groq Error:', error.message);
+    
+    // Fallback Claude Haiku si Groq rate limité
+    if (error.message.includes('429') || error.message.includes('rate') || error.message.includes('limit')) {
+      try {
+        console.log('🔄 Fallback vers Claude Haiku...');
+        const Anthropic = require('@anthropic-ai/sdk');
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const { imageBase64 } = req.body;
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const mimeType = imageBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
+        
+        const msg = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Data } },
+              { type: 'text', text: 'Identifie cet objet. Réponds UNIQUEMENT en JSON valide: {"nom":null,"marque":null,"modele":null,"categorie":"autre","etat":null,"epoque":null,"description":"description courte","prix_neuf":null,"prix_occasion":null,"prix_bas":null,"prix_haut":null,"confiance":50,"plateformes":[],"prix_plateformes":{}}' }
+            ]
+          }]
+        });
+        
+        const rawText = msg.content[0].text;
+        const start = rawText.indexOf('{');
+        const end = rawText.lastIndexOf('}');
+        const result = JSON.parse(rawText.substring(start, end + 1));
+        
+        return res.json({
+          success: true,
+          object: {
+            nom: result.nom, marque: result.marque, modele: result.modele,
+            categorie: result.categorie, etat: result.etat, epoque: result.epoque,
+            description: result.description, prixNeuf: result.prix_neuf,
+            prixOccasion: result.prix_occasion, confiance: result.confiance,
+            plateformes: result.plateformes || [], prixBas: result.prix_bas,
+            prixHaut: result.prix_haut, prixPlateformes: result.prix_plateformes || {},
+          },
+          fallback: 'claude-haiku'
+        });
+      } catch (fallbackError) {
+        console.error('❌ Fallback error:', fallbackError.message);
+      }
+    }
+    
     res.json({ success: false, error: error.message });
   }
 });
