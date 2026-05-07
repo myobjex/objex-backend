@@ -1089,6 +1089,110 @@ app.post('/api/worthpoint-prices', async (req, res) => {
   }
 });
 
+
+// ============================================
+// AVITO MAROC
+// ============================================
+app.post('/api/avito-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://www.avito.ma/fr/maroc/${encodeURIComponent(query)}`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000
+    });
+    const priceRegex = /data-price="([0-9]+)"|"price":([0-9]+)|([0-9]{2,6})\s*(?:DH|MAD)/g;
+    const prices = [];
+    let match;
+    while ((match = priceRegex.exec(response.data)) !== null) {
+      const p = parseInt(match[1] || match[2] || match[3]);
+      if (p > 10 && p < 500000) prices.push(Math.round(p / 10)); // MAD → CHF approx
+    }
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'avito' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'avito' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'avito' });
+  }
+});
+
+// ============================================
+// KLEINANZEIGEN (Allemagne)
+// ============================================
+app.post('/api/kleinanzeigen-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://www.kleinanzeigen.de/s-${encodeURIComponent(query)}/k0`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000
+    });
+    const priceRegex = /data-price="([0-9]+(?:\.[0-9]+)?)"|"([0-9]+(?:,[0-9]+)?)\s*€"/g;
+    const prices = [];
+    let match;
+    while ((match = priceRegex.exec(response.data)) !== null) {
+      const p = parseFloat((match[1] || match[2] || '0').replace(',', '.'));
+      if (p > 1 && p < 100000) prices.push(Math.round(p));
+    }
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'kleinanzeigen' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'kleinanzeigen' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'kleinanzeigen' });
+  }
+});
+
+// ============================================
+// WALLAPOP (Espagne)
+// ============================================
+app.post('/api/wallapop-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://api.wallapop.com/api/v3/general/search?keywords=${encodeURIComponent(query)}&filters_source=search_box&order_by=most_relevance`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      timeout: 6000
+    });
+    const items = response.data?.search_objects || [];
+    const prices = items.map(i => parseFloat(i.content?.price || 0)).filter(p => p > 0);
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'wallapop' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'wallapop' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'wallapop' });
+  }
+});
+
+// ============================================
+// TUTTI.CH (Suisse)
+// ============================================
+app.post('/api/tutti-prices', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://www.tutti.ch/fr/q?query=${encodeURIComponent(query)}`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000
+    });
+    const priceRegex = /CHF\s*([0-9]+(?:[.,][0-9]+)?)|([0-9]+(?:[.,][0-9]+)?)\s*CHF/g;
+    const prices = [];
+    let match;
+    while ((match = priceRegex.exec(response.data)) !== null) {
+      const p = parseFloat((match[1] || match[2] || '0').replace(',', '.'));
+      if (p > 1 && p < 100000) prices.push(Math.round(p));
+    }
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'tutti' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'tutti' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'tutti' });
+  }
+});
+
 // Keep-alive ping toutes les 14 minutes (Render free tier)
 const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://objex-backend.onrender.com';
 setInterval(async () => {
