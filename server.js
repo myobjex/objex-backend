@@ -302,33 +302,54 @@ app.post('/api/ebay-prices', async (req, res) => {
     if (!query) return res.json({ success: false, error: 'No query' });
 
     const token = await getEbayToken();
-    
-    const response = await axios.get(
-      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=20&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_FR',
-          'Content-Type': 'application/json',
-        }
-      }
+
+    // Tous les marchés Europe + Maghreb
+    const marketplaces = [
+      'EBAY_FR', 'EBAY_DE', 'EBAY_IT', 'EBAY_ES',
+      'EBAY_GB', 'EBAY_CH', 'EBAY_BE', 'EBAY_NL',
+      'EBAY_AT', 'EBAY_US'
+    ];
+
+    const results = await Promise.allSettled(
+      marketplaces.map(marketplace =>
+        axios.get(
+          `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-EBAY-C-MARKETPLACE-ID': marketplace,
+              'Content-Type': 'application/json',
+            },
+            timeout: 5000,
+          }
+        ).then(r => ({ marketplace, items: r.data.itemSummaries || [] }))
+      )
     );
 
-    const items = response.data.itemSummaries || [];
-    
-    if (items.length === 0) {
-      return res.json({ success: true, prix: null, count: 0, items: [] });
+    // Agréger tous les items
+    const allItems = [];
+    const byMarketplace = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const { marketplace, items } = r.value;
+        byMarketplace[marketplace] = items.length;
+        allItems.push(...items);
+      }
     }
 
-    const prices = items
+    if (allItems.length === 0) {
+      return res.json({ success: true, prix: null, count: 0, items: [], byMarketplace });
+    }
+
+    const prices = allItems
       .map(i => parseFloat(i.price?.value || 0))
       .filter(p => p > 0);
-    
+
     const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
     const prixBas = Math.round(Math.min(...prices));
     const prixHaut = Math.round(Math.max(...prices));
 
-    const topItems = items.slice(0, 5).map(i => ({
+    const topItems = allItems.slice(0, 10).map(i => ({
       titre: i.title,
       prix: parseFloat(i.price?.value || 0),
       devise: i.price?.currency || 'EUR',
@@ -342,8 +363,9 @@ app.post('/api/ebay-prices', async (req, res) => {
       prixMoyen,
       prixBas,
       prixHaut,
-      count: items.length,
+      count: allItems.length,
       items: topItems,
+      byMarketplace,
     });
 
   } catch (error) {
