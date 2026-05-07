@@ -215,25 +215,26 @@ Réponds UNIQUEMENT en JSON valide:
     if (error.message.includes('429') || error.message.includes('rate') || error.message.includes('limit')) {
       try {
         console.log('🔄 Fallback vers Claude Haiku...');
-        const Anthropic = require('@anthropic-ai/sdk');
-        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         const { imageBase64 } = req.body;
         const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
         const mimeType = imageBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
         
-        const msg = await anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1024,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Data } },
-              { type: 'text', text: 'Identifie cet objet. Réponds UNIQUEMENT en JSON valide: {"nom":null,"marque":null,"modele":null,"categorie":"autre","etat":null,"epoque":null,"description":"description courte","prix_neuf":null,"prix_occasion":null,"prix_bas":null,"prix_haut":null,"confiance":50,"plateformes":[],"prix_plateformes":{}}' }
-            ]
-          }]
-        });
-        
-        const rawText = msg.content[0].text;
+        const fallbackResponse = await axios.post(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            model: 'llama-3.1-8b-instant',
+            max_tokens: 512,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+                { type: 'text', text: 'Identifie cet objet. Réponds UNIQUEMENT en JSON: {"nom":null,"marque":null,"modele":null,"categorie":"autre","etat":null,"epoque":null,"description":"description courte","prix_neuf":null,"prix_occasion":null,"prix_bas":null,"prix_haut":null,"confiance":50,"plateformes":[],"prix_plateformes":{}}' }
+              ]
+            }]
+          },
+          { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+        );
+        const rawText = fallbackResponse.data.choices[0].message.content;
         const start = rawText.indexOf('{');
         const end = rawText.lastIndexOf('}');
         const result = JSON.parse(rawText.substring(start, end + 1));
@@ -248,7 +249,7 @@ Réponds UNIQUEMENT en JSON valide:
             plateformes: result.plateformes || [], prixBas: result.prix_bas,
             prixHaut: result.prix_haut, prixPlateformes: result.prix_plateformes || {},
           },
-          fallback: 'claude-haiku'
+          fallback: 'groq-8b'
         });
       } catch (fallbackError) {
         console.error('❌ Fallback error:', fallbackError.message);
@@ -767,16 +768,13 @@ Réponds en français, 2-3 phrases max, expert et concis, max 2 emojis.`;
     let reply, modelUsed;
 
     if (userPlan === 'pro') {
-      const Anthropic = require('@anthropic-ai/sdk');
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
         max_tokens: 400,
         system: systemPrompt,
         messages: messages.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.content || m.text })),
       });
       reply = response.content[0]?.text || 'Erreur IA.';
-      modelUsed = 'claude-haiku';
+      modelUsed = 'groq-haiku';
     } else if (userPlan === 'standard') {
       const response = await axios.post(
         'https://api.groq.com/openai/v1/chat/completions',
