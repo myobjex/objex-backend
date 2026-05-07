@@ -232,6 +232,18 @@ app.post('/api/search-prices', authenticateRequest, async (req, res) => {
       { site: 'Amazon', url: `https://www.amazon.fr/s?k=${encode(productName)}` },
       { site: 'Fnac', url: `https://www.fnac.com/SearchResult/ResultSet.aspx?SCat=0&Search=${encode(productName)}` },
     ],
+    brocante: [
+      { site: 'LeBonCoin', url: `https://www.leboncoin.fr/recherche?text=${encode(productName)}` },
+      { site: 'Catawiki', url: `https://www.catawiki.com/fr/l?q=${encode(productName)}` },
+      { site: 'Ricardo', url: `https://www.ricardo.ch/fr/s/${encode(productName)}/` },
+      { site: 'eBay', url: `https://www.ebay.fr/sch/i.html?_nkw=${encode(productName)}` },
+    ],
+    maison: [
+      { site: 'LeBonCoin', url: `https://www.leboncoin.fr/recherche?text=${encode(productName)}` },
+      { site: 'Vinted', url: `https://www.vinted.fr/catalog?search_text=${encode(productName)}` },
+      { site: 'eBay', url: `https://www.ebay.fr/sch/i.html?_nkw=${encode(productName)}` },
+      { site: 'Ricardo', url: `https://www.ricardo.ch/fr/s/${encode(productName)}/` },
+    ],
     antiquite: [
       { site: 'Catawiki', url: `https://www.catawiki.com/fr/l?q=${encode(productName)}` },
       { site: 'LeBonCoin', url: `https://www.leboncoin.fr/recherche?text=${encode(productName)}` },
