@@ -1193,6 +1193,65 @@ app.post('/api/tutti-prices', async (req, res) => {
   }
 });
 
+
+// ============================================
+// PRIX PAR PAYS - endpoint intelligent
+// ============================================
+app.post('/api/prices-by-country', async (req, res) => {
+  try {
+    const { query, countryCode = 'CH' } = req.body;
+    if (!query) return res.json({ success: false, results: [] });
+
+    const countryEndpoints = {
+      CH: ['ebay', 'ricardo', 'tutti'],
+      FR: ['ebay', 'leboncoin', 'vinted'],
+      DE: ['ebay', 'kleinanzeigen'],
+      ES: ['ebay', 'wallapop'],
+      MA: ['avito'],
+      DZ: [],
+      TN: [],
+      IT: ['ebay'],
+      GB: ['ebay'],
+      BE: ['ebay', 'vinted'],
+      NL: ['ebay'],
+      default: ['ebay']
+    };
+
+    const endpoints = countryEndpoints[countryCode] || countryEndpoints.default;
+    const token = await getEbayToken();
+
+    const results = {};
+
+    await Promise.allSettled(endpoints.map(async (site) => {
+      try {
+        if (site === 'ebay') {
+          const marketMap = { CH: 'EBAY_CH', FR: 'EBAY_FR', DE: 'EBAY_DE', ES: 'EBAY_ES', IT: 'EBAY_IT', GB: 'EBAY_GB', BE: 'EBAY_BE', NL: 'EBAY_NL' };
+          const marketplace = marketMap[countryCode] || 'EBAY_FR';
+          const r = await axios.get(
+            `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
+            { headers: { 'Authorization': `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': marketplace }, timeout: 5000 }
+          );
+          const items = r.data.itemSummaries || [];
+          const prices = items.map(i => parseFloat(i.price?.value || 0)).filter(p => p > 0);
+          if (prices.length) results.ebay = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+        }
+        if (site === 'avito') {
+          const r = await axios.get(`https://www.avito.ma/fr/maroc/${encodeURIComponent(query)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 });
+          const m = r.data.match(/([0-9]{2,6})\s*(?:DH|MAD)/g);
+          if (m && m.length) {
+            const prices = m.map(p => parseInt(p.replace(/[^0-9]/g, '')) / 10).filter(p => p > 5 && p < 50000);
+            if (prices.length) results.avito = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+          }
+        }
+      } catch(e) {}
+    }));
+
+    res.json({ success: true, results, countryCode });
+  } catch(e) {
+    res.json({ success: false, results: {}, error: e.message });
+  }
+});
+
 // Keep-alive ping toutes les 14 minutes (Render free tier)
 const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://objex-backend.onrender.com';
 setInterval(async () => {
