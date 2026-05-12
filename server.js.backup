@@ -1,72 +1,150 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const Anthropic = require('@anthropic-ai/sdk');
+const Groq = require('groq-sdk');
 require('dotenv').config();
+
+const EBAY_MARKETPLACE = {
+  CH: 'EBAY_CH',
+  FR: 'EBAY_FR',
+  DE: 'EBAY_DE',
+  GB: 'EBAY_GB',
+  US: 'EBAY_US',
+  IT: 'EBAY_IT',
+  ES: 'EBAY_ES',
+  BE: 'EBAY_BE',
+  NL: 'EBAY_NL',
+  AT: 'EBAY_AT',
+  AU: 'EBAY_AU',
+  CA: 'EBAY_CA',
+};
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
+
+// Middleware authentification
+const authenticateRequest = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== process.env.ARIZ_API_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
+// Rate limiting
+const requestCounts = {};
+const rateLimit = (req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  if (!requestCounts[ip]) requestCounts[ip] = [];
+  requestCounts[ip] = requestCounts[ip].filter(t => now - t < 60000);
+  if (requestCounts[ip].length >= 30) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  requestCounts[ip].push(now);
+  next();
+};
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.2.0', timestamp: new Date().toISOString() });
 });
 
-app.post('/api/recognize-object', async (req, res) => {
+app.post('/api/recognize-object', authenticateRequest, rateLimit, async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
+    const { imageBase64, countryCode = 'CH' } = req.body;
+
+    const COUNTRIES = {
+      CH: { currency: 'CHF', platforms: 'Ricardo.ch, Tutti.ch, Anibis.ch', context: 'Tu es en Suisse. Prix en CHF. Marché premium (+15% vs France).' },
+      FR: { currency: 'EUR', platforms: 'LeBonCoin, Vinted, eBay.fr', context: 'Tu es en France. Prix en euros.' },
+      DE: { currency: 'EUR', platforms: 'Kleinanzeigen, eBay.de, Rebuy', context: 'Du bist in Deutschland. Preise in Euro.' },
+      BE: { currency: 'EUR', platforms: '2ememain.be, Vinted BE', context: 'Tu es en Belgique. Prix en euros.' },
+      GB: { currency: 'GBP', platforms: 'Gumtree, eBay UK, Depop', context: 'You are in the UK. Prices in GBP.' },
+      US: { currency: 'USD', platforms: 'eBay, StockX, GOAT, Poshmark', context: 'You are in the US. Prices in USD.' },
+      MA: { currency: 'MAD', platforms: 'Avito.ma, Jumia.ma, Facebook Marketplace', context: 'Tu es au Maroc. Prix en MAD. Donne aussi le prix en EUR pour comparaison.' },
+      ES: { currency: 'EUR', platforms: 'Wallapop, Milanuncios, eBay.es', context: 'Estás en España. Precios en euros.' },
+      IT: { currency: 'EUR', platforms: 'Subito.it, eBay.it', context: 'Sei in Italia. Prezzi in euro.' },
+      NL: { currency: 'EUR', platforms: 'Marktplaats, Vinted NL', context: 'Je bent in Nederland. Prijzen in euro.' },
+      PT: { currency: 'EUR', platforms: 'OLX.pt, CustoJusto', context: 'Estás em Portugal. Preços em euros.' },
+      SE: { currency: 'SEK', platforms: 'Blocket, Tradera', context: 'Du är i Sverige. Priser i SEK.' },
+      AU: { currency: 'AUD', platforms: 'Gumtree AU, eBay AU', context: 'You are in Australia. Prices in AUD.' },
+      CA: { currency: 'CAD', platforms: 'Kijiji, Facebook Marketplace', context: 'You are in Canada. Prices in CAD.' },
+      JP: { currency: 'JPY', platforms: 'Mercari JP, Yahoo Auctions', context: 'You are in Japan. Prices in JPY.' },
+      SG: { currency: 'SGD', platforms: 'Carousell, Lazada', context: 'You are in Singapore. Prices in SGD.' },
+      ZA: { currency: 'ZAR', platforms: 'Gumtree ZA, OLX ZA', context: 'You are in South Africa. Prices in ZAR.' },
+      NG: { currency: 'NGN', platforms: 'Jiji.ng, Jumia NG', context: 'You are in Nigeria. Prices in NGN.' },
+      DZ: { currency: 'DZD', platforms: 'Ouedkniss, Facebook Marketplace', context: 'Tu es en Algérie. Prix en DZD.' },
+      TN: { currency: 'TND', platforms: 'Tayara.tn, Afrikha', context: 'Tu es en Tunisie. Prix en TND.' },
+      BR: { currency: 'BRL', platforms: 'Mercado Livre, OLX BR', context: 'Você está no Brasil. Preços em BRL.' },
+      MX: { currency: 'MXN', platforms: 'Mercado Libre, Facebook Marketplace', context: 'Estás en México. Precios en MXN.' },
+    };
+    const country = COUNTRIES[countryCode] || COUNTRIES['CH'];
+    const currency = country.currency;
+    const localPlatforms = country.platforms;
+    const localContext = country.context;
     if (!imageBase64) return res.json({ success: false, error: 'No image' });
 
     const mimeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    console.log('🔍 Appel Claude Vision...');
+    console.log('🔍 Appel Groq Vision...');
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       max_tokens: 1024,
-      messages: [{
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un expert en identification d'objets physiques. Tu analyses des images et retournes UNIQUEMENT un JSON valide, sans aucun texte avant ou après. Pas de markdown, pas d'explication. SEULEMENT le JSON brut. Tu identifies avec précision maximale: marque exacte, modèle exact, année, référence. Pour l'électronique Apple: distingue MacBook Air vs Pro, identifie la génération (M1/M2/M3/Intel), la taille d'écran (13, 14, 15, 16 pouces - regarde la proportion du clavier et de l'écran dans l'image pour estimer la taille). IMPORTANT: un MacBook Pro 16 pouces est notablement plus grand qu'un 13 pouces, le ratio écran/clavier est différent. En cas de doute sur la taille exact mets le dans la description mais ne te trompe pas de gamme (Air vs Pro). Pour les sneakers: marque + modèle + coloris exact. Confiance = 0-100 selon certitude d'identification.`
+        },
+        {
         role: 'user',
         content: [
           {
-            type: 'image',
-            source: { type: 'base64', media_type: mimeType, data: base64Data },
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64Data}` },
           },
           {
             type: 'text',
-            text: `Tu es un expert mondial en estimation et valorisation d'objets. Tu as une connaissance approfondie de:
-- MODE & SNEAKERS: prix StockX, GOAT, Vinted, eBay en temps réel
-- ÉLECTRONIQUE: prix Back Market, Amazon, Fnac, Apple Store
-- ANTIQUITÉS & BROCANTE: prix Catawiki, Drouot, maisons de ventes aux enchères
-- IMMOBILIER: prix au m² par ville et quartier
-- VÉHICULES: prix Argus, AutoScout24, cotes officielles
-- ART & ŒUVRES: prix galeries, enchères, artistes connus
-- MONTRES DE LUXE: prix Chrono24, WatchBox, marché secondaire
+            text: `${localContext}
 
-Analyse cette image et réponds UNIQUEMENT en JSON valide, sans texte avant ou après.
-Sois EXTRÊMEMENT PRÉCIS sur les prix. Règles strictes:
-1. Si tu identifies l'objet avec certitude: donne le VRAI prix du marché actuel (pas une estimation vague)
-2. Pour sneakers: vérifie StockX/GOAT selon coloris et taille standard EU42
-3. Pour électronique: prix Back Market grade A ou Amazon marketplace
-4. Pour montres: prix Chrono24 ou WatchBox marché secondaire réel
-5. Pour antiquités: prix Catawiki ou Drouot dernières ventes
-6. Pour véhicules: cote Argus ou AutoScout24 selon année/km moyens
-7. JAMAIS de prix ronds inventés — préfère une fourchette précise
-8. Si objet inconnu ou image floue: confiance < 50 et prix conservateurs
-Exemple bon prix: Nike Air Force 1 blanc EU42 = occasion 65-85 CHF selon état
-Exemple mauvais prix: 100 CHF (trop rond, inventé)
-Réponds UNIQUEMENT en JSON valide en CHF:
+Tu es un expert mondial en IDENTIFICATION d'objets. Ton seul rôle est d'IDENTIFIER avec précision maximale. Les prix réels viennent d'APIs externes — tu estimes les prix uniquement comme référence indicative.
+
+Tu identifies TOUT:
+- MODE & SNEAKERS: marque, modèle exact, coloris, année, référence
+- ELECTRONIQUE: marque, modèle, génération, capacité, couleur
+- MONTRES: marque, référence exacte, mouvement, matériaux
+- VEHICULES: marque, modèle, année, finition
+- ANTIQUITÉS & BROCANTE: époque précise (ex: "Art Déco 1920-1930"), style (Louis XVI, Napoléon III, Bauhaus...), matériaux (porcelaine de Limoges, faïence, bronze, laiton...), origine probable (France, Allemagne, Asie...), poinçons si visibles, état conservation. Prix brocante française: vide-grenier 5-50€, antiquaire 50-500€, Catawiki 100-2000€+
+- ART: artiste si signature visible, technique (huile sur toile, aquarelle, lithographie, sculpture bronze...), période, école artistique, dimensions approximatives si visibles, authenticité probable
+- NATURE: espèce exacte (nom latin), variété, comestibilité si champignon
+- SPORT: marque, modèle, sport concerné
+- GASTRONOMIE: produit, appellation, millésime si visible
+
+RÈGLES IDENTIFICATION:
+1. Utilise le web search pour confirmer le modèle exact si nécessaire
+2. Sois TRÈS précis: pas "sneaker Nike" mais "Nike Air Force 1 Low '07 White EU42"
+3. Si image floue/objet non identifiable: confiance < 40
+4. Pour espèces protégées: indique ESPÈCE PROTÉGÉE dans description
+5. Pour les VEHICULES: utilise les vraies cotes argus suisses/françaises. Ex: Audi A4 2016 diesel occasion = 18000-25000 CHF selon km. Sois très précis sur l'année et la finition.
+6. Pour l'ELECTRONIQUE: prix basés sur les vrais marchés eBay/Back Market actuels
+7. Estime les prix en CHF comme référence du marché actuel 2025-2026
+8. Pour ANTIQUITÉS/BROCANTE: sois très précis sur l'époque et le style. Une commode Louis XVI authentique vaut 800-3000€, une reproduction 50-200€. Indique toujours si c'est original ou reproduction probable.
+9. Pour ART: si signature visible, identifie l'artiste. Une lithographie signée numérotée vaut 200-2000€. Une peinture originale inconnue 50-500€. Une reproduction sans valeur.
+10. Pour BROCANTE générale: vaisselle ancienne 5-50€, luminaires vintage 20-200€, mobilier 50-800€, bibelots 2-30€
+
+Réponds UNIQUEMENT en JSON valide:
 {
-  "nom": "nom exact et complet (marque + modèle + année/référence si visible)",
-  "marque": "marque exacte ou null",
-  "modele": "modèle précis avec référence si connue",
-  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|autre",
-  "etat": "excellent|bon|moyen|mauvais",
+  "nom": "nom exact et complet (marque + modèle) — NE PAS écrire la string null, utiliser null JSON si inconnu",
+  "marque": "marque exacte (string) ou null (JSON null si inconnue)",
+  "modele": "modèle précis avec référence si connue (null si inconnu)",
+  "categorie": "mode|antiquite|electronique|brocante|vehicule|art|maison|montre|immo|plante|champignon|animal|mineral|gastronomie|sport|luminaire|autre",
+  "etat": "excellent|bon|moyen|mauvais|sauvage|cultivé|domestique",
   "epoque": "période, décennie ou année exacte si connue",
   "description": "description experte en français (max 25 mots)",
   "prix_neuf": prix CHF neuf ou valeur de référence (nombre entier),
@@ -93,10 +171,25 @@ Réponds UNIQUEMENT en JSON valide en CHF:
       }]
     });
 
-    const content = response.content[0].text;
-    console.log('✅ Claude response:', content);
+    // Avec web search, Claude retourne plusieurs blocs - on prend le dernier text
+    const rawText = response.choices[0].message.content;
+    console.log('✅ Groq response:', rawText.substring(0, 300));
 
-    const result = JSON.parse(content.replace(/```json|```/g, '').trim());
+    // Extraction robuste du JSON
+    let jsonStr = rawText;
+    // Cherche un bloc ```json ... ```
+    const codeMatch = rawText.match(/```json\s*([\s\S]*?)```/);
+    if (codeMatch) {
+      jsonStr = codeMatch[1].trim();
+    } else {
+      // Cherche le premier { jusqu'au dernier }
+      const start = rawText.indexOf('{');
+      const end = rawText.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        jsonStr = rawText.substring(start, end + 1);
+      }
+    }
+    const result = JSON.parse(jsonStr);
 
     res.json({
       success: true,
@@ -119,12 +212,58 @@ Réponds UNIQUEMENT en JSON valide en CHF:
     });
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ Groq Error:', error.message);
+    
+    // Fallback Claude Haiku si Groq rate limité
+    if (error.message.includes('429') || error.message.includes('rate') || error.message.includes('limit')) {
+      try {
+        console.log('🔄 Fallback vers Claude Haiku...');
+        const { imageBase64 } = req.body;
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const mimeType = imageBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
+        
+        const fallbackResponse = await axios.post(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            model: 'llama-3.1-8b-instant',
+            max_tokens: 512,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+                { type: 'text', text: 'Identifie cet objet. Réponds UNIQUEMENT en JSON: {"nom":null,"marque":null,"modele":null,"categorie":"autre","etat":null,"epoque":null,"description":"description courte","prix_neuf":null,"prix_occasion":null,"prix_bas":null,"prix_haut":null,"confiance":50,"plateformes":[],"prix_plateformes":{}}' }
+              ]
+            }]
+          },
+          { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+        );
+        const rawText = fallbackResponse.data.choices[0].message.content;
+        const start = rawText.indexOf('{');
+        const end = rawText.lastIndexOf('}');
+        const result = JSON.parse(rawText.substring(start, end + 1));
+        
+        return res.json({
+          success: true,
+          object: {
+            nom: result.nom, marque: result.marque, modele: result.modele,
+            categorie: result.categorie, etat: result.etat, epoque: result.epoque,
+            description: result.description, prixNeuf: result.prix_neuf,
+            prixOccasion: result.prix_occasion, confiance: result.confiance,
+            plateformes: result.plateformes || [], prixBas: result.prix_bas,
+            prixHaut: result.prix_haut, prixPlateformes: result.prix_plateformes || {},
+          },
+          fallback: 'groq-8b'
+        });
+      } catch (fallbackError) {
+        console.error('❌ Fallback error:', fallbackError.message);
+      }
+    }
+    
     res.json({ success: false, error: error.message });
   }
 });
 
-app.post('/api/search-prices', async (req, res) => {
+app.post('/api/search-prices', authenticateRequest, async (req, res) => {
   const { productName, categorie, prixNeuf, prixOccasion } = req.body;
 
   const encode = (s) => encodeURIComponent(s);
@@ -141,6 +280,18 @@ app.post('/api/search-prices', async (req, res) => {
       { site: 'eBay', url: `https://www.ebay.fr/sch/i.html?_nkw=${encode(productName)}` },
       { site: 'Amazon', url: `https://www.amazon.fr/s?k=${encode(productName)}` },
       { site: 'Fnac', url: `https://www.fnac.com/SearchResult/ResultSet.aspx?SCat=0&Search=${encode(productName)}` },
+    ],
+    brocante: [
+      { site: 'LeBonCoin', url: `https://www.leboncoin.fr/recherche?text=${encode(productName)}` },
+      { site: 'Catawiki', url: `https://www.catawiki.com/fr/l?q=${encode(productName)}` },
+      { site: 'Ricardo', url: `https://www.ricardo.ch/fr/s/${encode(productName)}/` },
+      { site: 'eBay', url: `https://www.ebay.fr/sch/i.html?_nkw=${encode(productName)}` },
+    ],
+    maison: [
+      { site: 'LeBonCoin', url: `https://www.leboncoin.fr/recherche?text=${encode(productName)}` },
+      { site: 'Vinted', url: `https://www.vinted.fr/catalog?search_text=${encode(productName)}` },
+      { site: 'eBay', url: `https://www.ebay.fr/sch/i.html?_nkw=${encode(productName)}` },
+      { site: 'Ricardo', url: `https://www.ricardo.ch/fr/s/${encode(productName)}/` },
     ],
     antiquite: [
       { site: 'Catawiki', url: `https://www.catawiki.com/fr/l?q=${encode(productName)}` },
@@ -206,39 +357,60 @@ async function getEbayToken() {
   return _ebayToken;
 }
 
-app.post('/api/ebay-prices', async (req, res) => {
+app.post('/api/ebay-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
 
     const token = await getEbayToken();
-    
-    const response = await axios.get(
-      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_FR',
-          'Content-Type': 'application/json',
-        }
-      }
+
+    // Tous les marchés Europe + Maghreb
+    const marketplaces = [
+      'EBAY_FR', 'EBAY_DE', 'EBAY_IT', 'EBAY_ES',
+      'EBAY_GB', 'EBAY_CH', 'EBAY_BE', 'EBAY_NL',
+      'EBAY_AT', 'EBAY_US'
+    ];
+
+    const results = await Promise.allSettled(
+      marketplaces.map(marketplace =>
+        axios.get(
+          `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-EBAY-C-MARKETPLACE-ID': marketplace,
+              'Content-Type': 'application/json',
+            },
+            timeout: 5000,
+          }
+        ).then(r => ({ marketplace, items: r.data.itemSummaries || [] }))
+      )
     );
 
-    const items = response.data.itemSummaries || [];
-    
-    if (items.length === 0) {
-      return res.json({ success: true, prix: null, count: 0, items: [] });
+    // Agréger tous les items
+    const allItems = [];
+    const byMarketplace = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const { marketplace, items } = r.value;
+        byMarketplace[marketplace] = items.length;
+        allItems.push(...items);
+      }
     }
 
-    const prices = items
+    if (allItems.length === 0) {
+      return res.json({ success: true, prix: null, count: 0, items: [], byMarketplace });
+    }
+
+    const prices = allItems
       .map(i => parseFloat(i.price?.value || 0))
       .filter(p => p > 0);
-    
+
     const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
     const prixBas = Math.round(Math.min(...prices));
     const prixHaut = Math.round(Math.max(...prices));
 
-    const topItems = items.slice(0, 5).map(i => ({
+    const topItems = allItems.slice(0, 10).map(i => ({
       titre: i.title,
       prix: parseFloat(i.price?.value || 0),
       devise: i.price?.currency || 'EUR',
@@ -252,8 +424,9 @@ app.post('/api/ebay-prices', async (req, res) => {
       prixMoyen,
       prixBas,
       prixHaut,
-      count: items.length,
+      count: allItems.length,
       items: topItems,
+      byMarketplace,
     });
 
   } catch (error) {
@@ -263,7 +436,7 @@ app.post('/api/ebay-prices', async (req, res) => {
 });
 
 
-app.post('/api/amazon-prices', async (req, res) => {
+app.post('/api/amazon-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -276,7 +449,8 @@ app.post('/api/amazon-prices', async (req, res) => {
           page: '1',
           country: 'FR',
           sort_by: 'RELEVANCE',
-          product_condition: 'ALL',
+          product_condition: 'USED',
+          sort_by: 'PRICE_LOW_TO_HIGH',
         },
         headers: {
           'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
@@ -294,9 +468,11 @@ app.post('/api/amazon-prices', async (req, res) => {
 
     if (prices.length === 0) return res.json({ success: true, prix: null, count: 0 });
 
-    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-    const prixBas = Math.round(Math.min(...prices));
-    const prixHaut = Math.round(Math.max(...prices));
+    // Correction: si prix > 10000, probablement en centimes
+    const fixPrice = p => p > 10000 ? Math.round(p / 100) : Math.round(p);
+    const prixMoyen = fixPrice(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const prixBas = fixPrice(Math.min(...prices));
+    const prixHaut = fixPrice(Math.max(...prices));
 
     const topItems = products.slice(0, 5).map(p => ({
       titre: p.product_title,
@@ -322,7 +498,7 @@ app.post('/api/amazon-prices', async (req, res) => {
 });
 
 
-app.post('/api/autoscout-prices', async (req, res) => {
+app.post('/api/autoscout-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -379,7 +555,7 @@ app.post('/api/autoscout-prices', async (req, res) => {
 });
 
 
-app.post('/api/vinted-prices', async (req, res) => {
+app.post('/api/vinted-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -437,7 +613,7 @@ app.post('/api/vinted-prices', async (req, res) => {
 });
 
 
-app.post('/api/etsy-prices', async (req, res) => {
+app.post('/api/etsy-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -489,7 +665,7 @@ app.post('/api/etsy-prices', async (req, res) => {
 });
 
 
-app.post('/api/chrono24-prices', async (req, res) => {
+app.post('/api/chrono24-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -534,7 +710,7 @@ app.post('/api/chrono24-prices', async (req, res) => {
 });
 
 
-app.post('/api/catawiki-prices', async (req, res) => {
+app.post('/api/catawiki-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, error: 'No query' });
@@ -582,43 +758,45 @@ app.post('/api/catawiki-prices', async (req, res) => {
   }
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', authenticateRequest, rateLimit, async (req, res) => {
   try {
-    const { messages, objectContext } = req.body;
-    const response = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          {
-            role: 'system',
-            content: `Tu es l'IA experte de MYOBJEX, spécialisée UNIQUEMENT dans l'évaluation d'objets et le marché de revente.
+    const { messages, objectContext, userPlan } = req.body;
 
+    const systemPrompt = `Tu es l'IA experte de MYOBJEX, spécialisée UNIQUEMENT dans l'évaluation d'objets et le marché de revente.
 Objet analysé: ${objectContext.nom} (${objectContext.marque}). Catégorie: ${objectContext.categorie}. État: ${objectContext.etat}. Prix neuf: ${objectContext.prixNeuf} CHF, occasion: ${objectContext.prixOccasion} CHF.
+Tu réponds UNIQUEMENT aux questions sur la valeur, le prix, l'authenticité, où vendre/acheter, les tendances marché.
+Si hors sujet, réponds: "Je suis spécialisé uniquement dans l'évaluation d'objets. Scannez un objet pour que je vous aide ! 📷"
+Réponds en français, 2-3 phrases max, expert et concis, max 2 emojis.`;
 
-Tu réponds UNIQUEMENT aux questions sur:
-- La valeur, le prix, l'authenticité de l'objet
-- Où et comment vendre/acheter cet objet
-- Les tendances du marché de revente
-- Les plateformes recommandées (eBay, Vinted, StockX, etc.)
+    let reply, modelUsed;
 
-Si la question n'est PAS liée aux objets ou au marché de revente, réponds exactement: "Je suis spécialisé uniquement dans l'évaluation d'objets. Scannez un objet pour que je vous aide ! 📷"
+    if (userPlan === 'pro') {
+      const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        max_tokens: 400,
+        system: systemPrompt,
+        messages: messages.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, content: m.content || m.text })),
+      });
+      reply = response.content[0]?.text || 'Erreur IA.';
+      modelUsed = 'groq-haiku';
+    } else if (userPlan === 'standard') {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, ...messages], max_tokens: 300 },
+        { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+      modelUsed = 'groq-70b';
+    } else {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        { model: 'llama-3.1-8b-instant', messages: [{ role: 'system', content: systemPrompt }, ...messages], max_tokens: 200 },
+        { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
+      modelUsed = 'groq-8b';
+    }
 
-Réponds en français, 2-3 phrases maximum, expert et concis, max 2 emojis.`
-          },
-          ...messages
-        ],
-        max_tokens: 200,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        }
-      }
-    );
-    const reply = response.data.choices?.[0]?.message?.content || 'Erreur IA.';
-    res.json({ success: true, reply });
+    res.json({ success: true, reply, model: modelUsed });
   } catch (error) {
     console.error('Chat error:', error.message);
     res.json({ success: false, reply: 'Erreur serveur.' });
@@ -626,7 +804,7 @@ Réponds en français, 2-3 phrases maximum, expert et concis, max 2 emojis.`
 });
 
 // ========== LEBONCOIN ==========
-app.post('/api/leboncoin-prices', async (req, res) => {
+app.post('/api/leboncoin-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -683,7 +861,7 @@ app.post('/api/leboncoin-prices', async (req, res) => {
 });
 
 // ========== RICARDO ==========
-app.post('/api/ricardo-prices', async (req, res) => {
+app.post('/api/ricardo-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -740,7 +918,7 @@ app.post('/api/ricardo-prices', async (req, res) => {
 });
 
 // ========== STOCKX ==========
-app.post('/api/stockx-prices', async (req, res) => {
+app.post('/api/stockx-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -794,7 +972,7 @@ app.post('/api/stockx-prices', async (req, res) => {
 });
 
 // ========== GOAT ==========
-app.post('/api/goat-prices', async (req, res) => {
+app.post('/api/goat-prices', authenticateRequest, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
@@ -846,4 +1024,303 @@ app.post('/api/goat-prices', async (req, res) => {
     res.json({ success: false, error: error.message, prixMoyen: null, count: 0 });
   }
 });
+
+// ============================================
+// PRICECHARTING - Jeux vidéo, cartes, retro
+// ============================================
+app.post('/api/pricecharting-prices', authenticateRequest, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const apiKey = process.env.PRICECHARTING_API_KEY;
+    if (!apiKey) {
+      // Fallback: scraping public endpoint
+      const response = await axios.get(
+        `https://www.pricecharting.com/api/product?id=${encodeURIComponent(query)}&status=used`,
+        { headers: { 'User-Agent': 'MYOBJEX/1.0' }, timeout: 8000 }
+      );
+      const data = response.data;
+      if (!data || data.status === 'error') return res.json({ success: false, prixMoyen: null, count: 0 });
+
+      const loose = Math.round((data['loose-price'] || 0) / 100);
+      const complete = Math.round((data['complete-price'] || 0) / 100);
+      const graded = Math.round((data['graded-price'] || 0) / 100);
+
+      return res.json({
+        success: true,
+        prixMoyen: loose || complete || null,
+        prixBas: loose ? Math.round(loose * 0.8) : null,
+        prixHaut: graded || complete || null,
+        loose, complete, graded,
+        count: loose ? 1 : 0,
+        source: 'pricecharting'
+      });
+    }
+
+    const response = await axios.get(
+      `https://www.pricecharting.com/api/products?q=${encodeURIComponent(query)}&api-key=${apiKey}`,
+      { timeout: 8000 }
+    );
+    const products = response.data?.products || [];
+    if (!products.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'pricecharting' });
+
+    const top = products[0];
+    const loose = Math.round((top['loose-price'] || 0) / 100);
+    const complete = Math.round((top['complete-price'] || 0) / 100);
+    const graded = Math.round((top['graded-price'] || 0) / 100);
+
+    res.json({
+      success: true,
+      prixMoyen: loose || complete || null,
+      prixBas: loose ? Math.round(loose * 0.8) : null,
+      prixHaut: graded || complete || (loose ? Math.round(loose * 1.3) : null),
+      loose, complete, graded,
+      productName: top['product-name'],
+      count: products.length,
+      source: 'pricecharting'
+    });
+  } catch (error) {
+    console.error('PriceCharting error:', error.message);
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'pricecharting' });
+  }
+});
+
+// ============================================
+// WORTHPOINT - Antiquités & objets de collection
+// ============================================
+app.post('/api/worthpoint-prices', authenticateRequest, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, error: 'No query' });
+
+    const apiKey = process.env.WORTHPOINT_API_KEY;
+    if (!apiKey) {
+      // Sans clé: utilise eBay sold listings comme proxy antiquités
+      const token = await getEbayToken();
+      const response = await axios.get(
+        `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query + ' antique vintage')}&limit=20&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-EBAY-C-MARKETPLACE-ID': 'EBAY_FR',
+          }
+        }
+      );
+      const items = response.data.itemSummaries || [];
+      if (!items.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint-fallback' });
+
+      const prices = items.map(i => parseFloat(i.price?.value || 0)).filter(p => p > 0);
+      const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+      return res.json({
+        success: true,
+        prixMoyen,
+        prixBas: Math.round(Math.min(...prices)),
+        prixHaut: Math.round(Math.max(...prices)),
+        count: prices.length,
+        source: 'worthpoint-fallback'
+      });
+    }
+
+    const response = await axios.get(
+      `https://api.worthpoint.com/v1/search?query=${encodeURIComponent(query)}&api_key=${apiKey}&limit=10`,
+      { timeout: 8000 }
+    );
+    const items = response.data?.results || [];
+    if (!items.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint' });
+
+    const prices = items.map(i => parseFloat(i.price || 0)).filter(p => p > 0);
+    const prixMoyen = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+    res.json({
+      success: true,
+      prixMoyen,
+      prixBas: Math.round(Math.min(...prices)),
+      prixHaut: Math.round(Math.max(...prices)),
+      count: prices.length,
+      source: 'worthpoint'
+    });
+  } catch (error) {
+    console.error('WorthPoint error:', error.message);
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'worthpoint' });
+  }
+});
+
+
+// ============================================
+// AVITO MAROC
+// ============================================
+app.post('/api/avito-prices', authenticateRequest, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://www.avito.ma/fr/maroc/${encodeURIComponent(query)}`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000
+    });
+    const priceRegex = /data-price="([0-9]+)"|"price":([0-9]+)|([0-9]{2,6})\s*(?:DH|MAD)/g;
+    const prices = [];
+    let match;
+    while ((match = priceRegex.exec(response.data)) !== null) {
+      const p = parseInt(match[1] || match[2] || match[3]);
+      if (p > 10 && p < 500000) prices.push(Math.round(p / 10)); // MAD → CHF approx
+    }
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'avito' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'avito' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'avito' });
+  }
+});
+
+// ============================================
+// KLEINANZEIGEN (Allemagne)
+// ============================================
+app.post('/api/kleinanzeigen-prices', authenticateRequest, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://www.kleinanzeigen.de/s-${encodeURIComponent(query)}/k0`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000
+    });
+    const priceRegex = /data-price="([0-9]+(?:\.[0-9]+)?)"|"([0-9]+(?:,[0-9]+)?)\s*€"/g;
+    const prices = [];
+    let match;
+    while ((match = priceRegex.exec(response.data)) !== null) {
+      const p = parseFloat((match[1] || match[2] || '0').replace(',', '.'));
+      if (p > 1 && p < 100000) prices.push(Math.round(p));
+    }
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'kleinanzeigen' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'kleinanzeigen' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'kleinanzeigen' });
+  }
+});
+
+// ============================================
+// WALLAPOP (Espagne)
+// ============================================
+app.post('/api/wallapop-prices', authenticateRequest, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://api.wallapop.com/api/v3/general/search?keywords=${encodeURIComponent(query)}&filters_source=search_box&order_by=most_relevance`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      timeout: 6000
+    });
+    const items = response.data?.search_objects || [];
+    const prices = items.map(i => parseFloat(i.content?.price || 0)).filter(p => p > 0);
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'wallapop' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'wallapop' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'wallapop' });
+  }
+});
+
+// ============================================
+// TUTTI.CH (Suisse)
+// ============================================
+app.post('/api/tutti-prices', authenticateRequest, async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) return res.json({ success: false, prixMoyen: null, count: 0 });
+    const url = `https://www.tutti.ch/fr/q?query=${encodeURIComponent(query)}`;
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000
+    });
+    const priceRegex = /CHF\s*([0-9]+(?:[.,][0-9]+)?)|([0-9]+(?:[.,][0-9]+)?)\s*CHF/g;
+    const prices = [];
+    let match;
+    while ((match = priceRegex.exec(response.data)) !== null) {
+      const p = parseFloat((match[1] || match[2] || '0').replace(',', '.'));
+      if (p > 1 && p < 100000) prices.push(Math.round(p));
+    }
+    if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'tutti' });
+    const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+    res.json({ success: true, prixMoyen, prixBas: Math.min(...prices), prixHaut: Math.max(...prices), count: prices.length, source: 'tutti' });
+  } catch (e) {
+    res.json({ success: false, prixMoyen: null, count: 0, source: 'tutti' });
+  }
+});
+
+
+// ============================================
+// PRIX PAR PAYS - endpoint intelligent
+// ============================================
+app.post('/api/prices-by-country', authenticateRequest, async (req, res) => {
+  try {
+    const { query, countryCode = 'CH' } = req.body;
+    if (!query) return res.json({ success: false, results: [] });
+
+    const countryEndpoints = {
+      CH: ['ebay', 'ricardo', 'tutti'],
+      FR: ['ebay', 'leboncoin', 'vinted'],
+      DE: ['ebay', 'kleinanzeigen'],
+      ES: ['ebay', 'wallapop'],
+      MA: ['avito'],
+      DZ: [],
+      TN: [],
+      IT: ['ebay'],
+      GB: ['ebay'],
+      BE: ['ebay', 'vinted'],
+      NL: ['ebay'],
+      default: ['ebay']
+    };
+
+    const endpoints = countryEndpoints[countryCode] || countryEndpoints.default;
+    const token = await getEbayToken();
+
+    const results = {};
+
+    await Promise.allSettled(endpoints.map(async (site) => {
+      try {
+        if (site === 'ebay') {
+          const marketMap = { CH: 'EBAY_CH', FR: 'EBAY_FR', DE: 'EBAY_DE', ES: 'EBAY_ES', IT: 'EBAY_IT', GB: 'EBAY_GB', BE: 'EBAY_BE', NL: 'EBAY_NL' };
+          const marketplace = marketMap[countryCode] || 'EBAY_FR';
+          const r = await axios.get(
+            `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=10&filter=buyingOptions:{FIXED_PRICE},conditions:{USED}`,
+            { headers: { 'Authorization': `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': marketplace }, timeout: 5000 }
+          );
+          const items = r.data.itemSummaries || [];
+          const prices = items.map(i => parseFloat(i.price?.value || 0)).filter(p => p > 0);
+          if (prices.length) results.ebay = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+        }
+        if (site === 'avito') {
+          const r = await axios.get(`https://www.avito.ma/fr/maroc/${encodeURIComponent(query)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 });
+          const m = r.data.match(/([0-9]{2,6})\s*(?:DH|MAD)/g);
+          if (m && m.length) {
+            const prices = m.map(p => parseInt(p.replace(/[^0-9]/g, '')) / 10).filter(p => p > 5 && p < 50000);
+            if (prices.length) results.avito = Math.round(prices.reduce((a,b) => a+b) / prices.length);
+          }
+        }
+      } catch(e) {}
+    }));
+
+    res.json({ success: true, results, countryCode });
+  } catch(e) {
+    res.json({ success: false, results: {}, error: e.message });
+  }
+});
+
+// Keep-alive ping toutes les 14 minutes (Render free tier)
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://objex-backend.onrender.com';
+setInterval(async () => {
+  try {
+    const http = require('https');
+    http.get(SELF_URL + '/health', (res) => {
+      console.log('🏓 Keep-alive ping OK:', res.statusCode);
+    }).on('error', () => {});
+  } catch(e) {}
+}, 10 * 60 * 1000);
+
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));

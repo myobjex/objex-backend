@@ -1323,4 +1323,61 @@ setInterval(async () => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
+
+// 4 NOUVEAUX SCRAPERS
+async function scrapeGalaxus(q) {
+  try {
+    const r = await fetch(`https://www.galaxus.ch/en/search?q=${encodeURIComponent(q)}`);
+    const m = (await r.text()).match(/CHF\s*([\d,\.]+)/i);
+    return m ? { success: true, platform: 'Galaxus.ch', price: parseInt(m[1].replace(/[.,]/g, '')) } : { success: false };
+  } catch(e) { return { success: false }; }
+}
+
+async function scrapeDigitec(q) {
+  try {
+    const r = await fetch(`https://www.digitec.ch/en/search?q=${encodeURIComponent(q)}`);
+    const m = (await r.text()).match(/CHF\s*([\d,\.]+)/i);
+    return m ? { success: true, platform: 'Digitec.ch', price: parseInt(m[1].replace(/[.,]/g, '')) } : { success: false };
+  } catch(e) { return { success: false }; }
+}
+
+async function scrapeGrailed(q) {
+  try {
+    const r = await fetch(`https://www.grailed.com/search?query=${encodeURIComponent(q)}`);
+    const m = (await r.text()).match(/\$([\d,\.]+)/);
+    return m ? { success: true, platform: 'Grailed', price: Math.round(parseInt(m[1].replace(/[.,]/g, '')) * 0.92) } : { success: false };
+  } catch(e) { return { success: false }; }
+}
+
+async function scrapeDepop(q) {
+  try {
+    const r = await fetch(`https://www.depop.com/search/?q=${encodeURIComponent(q)}`);
+    const h = await r.text();
+    const m = h.match(/[£$]\s*([\d,\.]+)/);
+    if (!m) return { success: false };
+    let p = parseInt(m[1].replace(/[.,]/g, ''));
+    p = h.includes('£') ? Math.round(p * 1.18) : Math.round(p * 0.92);
+    return { success: true, platform: 'Depop', price: p };
+  } catch(e) { return { success: false }; }
+}
+
+
+
+app.post('/api/galaxus-prices', async (req, res) => {
+  res.json(await scrapeGalaxus(req.body.query));
+});
+
+app.post('/api/digitec-prices', async (req, res) => {
+  res.json(await scrapeDigitec(req.body.query));
+});
+
+app.post('/api/grailed-prices', async (req, res) => {
+  res.json(await scrapeGrailed(req.body.query));
+});
+
+app.post('/api/depop-prices', async (req, res) => {
+  res.json(await scrapeDepop(req.body.query));
+});
+
+
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
