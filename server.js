@@ -147,8 +147,9 @@ Réponds UNIQUEMENT en JSON valide:
   "etat": "excellent|bon|moyen|mauvais|sauvage|cultivé|domestique",
   "epoque": "période, décennie ou année exacte si connue",
   "description": "description experte en français (max 25 mots)",
-  "prix_neuf": prix CHF neuf ou valeur de référence (nombre entier),
+  "prix_neuf": prix CHF estimation valeur neuf ou référence (nombre entier ou null),
   "prix_occasion": prix CHF marché occasion actuel (nombre entier),
+  IMPORTANT: TOUJOURS remplir prix_neuf ET prix_occasion, meme pour antiquites/art/brocante. Pour antiquites: prix_neuf = estimation neuf du meme objet aujourd'hui, prix_occasion = prix marche actuel (Catawiki, eBay, LeBonCoin).
   "prix_bas": estimation basse du marché (nombre entier),
   "prix_haut": estimation haute du marché (nombre entier),
   "confiance": niveau de confiance 0-100,
