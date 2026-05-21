@@ -3,6 +3,9 @@ const cors = require('cors');
 const axios = require('axios');
 const Groq = require('groq-sdk');
 require('dotenv').config();
+const pRetry = require("p-retry");
+const cheerio = require("cheerio");
+const NodeCache = require("node-cache");
 
 const EBAY_MARKETPLACE = {
   CH: 'EBAY_CH',
@@ -26,6 +29,31 @@ app.use(express.json({ limit: '50mb' }));
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
+// ===== CACHE & RETRY HELPERS =====
+const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
+
+const retryOptions = {
+  retries: 3,
+  minTimeout: 1000,
+  maxTimeout: 5000,
+  onFailedAttempt: (err) => {
+    console.log(`⚠️ Retry ${err.attemptNumber}/3: ${err.message}`);
+  }
+};
+
+async function fetchWithRetry(url, config = {}) {
+  return pRetry(
+    () => axios.get(url, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' }, ...config }),
+    retryOptions
+  );
+}
+
+function parsePrice(text) {
+  const match = text.match(/[\$£€]\s*([\d,\.]+)|([0-9,\.]+)\s*(?:CHF|EUR|USD|GBP)/i);
+  if (!match) return null;
+  return Math.round(parseFloat((match[1] || match[2] || '0').replace(/,/g, '.')));
+}
+
 
 
 // Middleware authentification
