@@ -49,7 +49,7 @@ async function fetchWithRetry(url, config = {}) {
 }
 
 function parsePrice(text) {
-  const match = text.match(/[\$£€]\s*([\d,\.]+)|([0-9,\.]+)\s*(?:CHF|EUR|USD|GBP)/i);
+  const match = text.match(/[\$£€د]\s*([\d,\.]+)|([0-9,\.]+)\s*(?:CHF|EUR|USD|GBP|MAD|DH|AED|SEK|NOK|DKK|CAD|AUD|SGD|JPY|ZAR|NGN|DZD|TND|BRL|MXN|PLN|TRY|ILS|KWD|SAR|QAR|INR|MYR|THB|IDR|PHP|KES|XOF|XAF|CLP|COP|PEN|ARS)/i);
   if (!match) return null;
   return Math.round(parseFloat((match[1] || match[2] || '0').replace(/,/g, '.')));
 }
@@ -1326,7 +1326,7 @@ app.post('/api/prices-by-country', authenticateRequest, async (req, res) => {
           const r = await axios.get(`https://www.avito.ma/fr/maroc/${encodeURIComponent(query)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 });
           const m = r.data.match(/([0-9]{2,6})\s*(?:DH|MAD)/g);
           if (m && m.length) {
-            const prices = m.map(p => parseInt(p.replace(/[^0-9]/g, '')) / 10).filter(p => p > 5 && p < 50000);
+            const prices = m.map(p => parseInt(p.replace(/[^0-9]/g, ''))).filter(p => p > 50 && p < 500000);
             if (prices.length) results.avito = Math.round(prices.reduce((a,b) => a+b) / prices.length);
           }
         }
