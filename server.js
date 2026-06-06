@@ -93,7 +93,7 @@ app.post('/api/recognize-object', authenticateRequest, rateLimit, async (req, re
       BE: { currency: 'EUR', platforms: '2ememain.be, Vinted BE', context: 'Tu es en Belgique. Prix en euros.' },
       GB: { currency: 'GBP', platforms: 'Gumtree, eBay UK, Depop', context: 'You are in the UK. Prices in GBP.' },
       US: { currency: 'USD', platforms: 'eBay, StockX, GOAT, Poshmark', context: 'You are in the US. Prices in USD.' },
-      MA: { currency: 'MAD', platforms: 'Avito.ma, Jumia.ma, Facebook Marketplace', context: 'Tu es au Maroc. Prix en MAD. Donne aussi le prix en EUR pour comparaison.' },
+      MA: { currency: 'MAD', platforms: 'Avito.ma, Jumia.ma, Moteur.ma, Wandaloo.ma, Facebook Marketplace Maroc', context: 'Tu es au Maroc. IMPORTANT: Tous les prix DOIVENT etre en MAD (dirhams marocains). Taux: 1 EUR = 10.8 MAD, 1 USD = 9.9 MAD, 1 CHF = 11.2 MAD. Exemple: iPhone 13 = 8500 MAD, MacBook Pro = 18000 MAD, Nike Air Force = 900 MAD. Ne jamais donner de prix en EUR ou CHF.' },
       ES: { currency: 'EUR', platforms: 'Wallapop, Milanuncios, eBay.es', context: 'Estás en España. Precios en euros.' },
       IT: { currency: 'EUR', platforms: 'Subito.it, eBay.it', context: 'Sei in Italia. Prezzi in euro.' },
       NL: { currency: 'EUR', platforms: 'Marktplaats, Vinted NL', context: 'Je bent in Nederland. Prijzen in euro.' },
