@@ -1410,3 +1410,4 @@ app.post('/api/depop-prices', async (req, res) => {
 
 
 app.listen(3000, () => console.log('✅ OBJEX Backend — Claude Vision actif!'));
+// deploy trigger sam.  6 juin 2026 22:40:48 +01
