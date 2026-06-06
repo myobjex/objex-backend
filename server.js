@@ -1194,7 +1194,7 @@ app.post('/api/avito-prices', authenticateRequest, async (req, res) => {
     let match;
     while ((match = priceRegex.exec(response.data)) !== null) {
       const p = parseInt(match[1] || match[2] || match[3]);
-      if (p > 10 && p < 500000) prices.push(Math.round(p / 10)); // MAD → CHF approx
+      if (p > 50 && p < 500000) prices.push(Math.round(p)); // garder en MAD
     }
     if (!prices.length) return res.json({ success: false, prixMoyen: null, count: 0, source: 'avito' });
     const prixMoyen = Math.round(prices.reduce((a,b) => a+b) / prices.length);
